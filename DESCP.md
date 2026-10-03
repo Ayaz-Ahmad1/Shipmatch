@@ -14,7 +14,7 @@
 | **What it is** | A multi-tenant B2B SaaS that automates **accounts payable for import shipments**. It reads messy shipping paperwork from email, groups each document into its shipment, catches overcharges and errors, routes them to human approval, and posts bills to **QuickBooks Online or Xero**. |
 | **Who it's for** | Importers, freight forwarders, customs brokers, logistics companies, and the bookkeeping/accounting firms that serve them. |
 | **Core idea** | AI is used **only to read documents**. Matching, validation and money math are deterministic, testable code. A human approves anything uncertain. |
-| **Size** | **~66,000 hand-written lines of code**: ~42,400 lines of application Python across 18 Django apps, ~12,900 lines of tests (**838 automated tests**), ~9,600 lines of templates/CSS/JS, ~800 lines of deploy/ops scripts. That excludes auto-generated migrations and vendored libraries. Also 213 URL routes, 154 templates and a 1,200-line operator README. This is the scale of a funded startup's product, not a weekend demo. |
+| **Size** | **~66,000 hand-written lines of code**: ~42,400 lines of application Python across 18 Django apps, ~12,900 lines of tests (**838 automated tests, all passing**), ~9,600 lines of templates/CSS/JS, ~800 lines of deploy/ops scripts. That excludes auto-generated migrations and vendored libraries. Also 213 URL routes, 154 templates and a 1,200-line operator README. This is the scale of a funded startup's product, not a weekend demo. |
 | **Benchmark** | On the bundled 68-document labelled benchmark: **100% field accuracy, 100% document grouping, 100% planted-error detection, 0 false alarms, $0.00 AI cost** (offline rule reader). Measured 2026-10-03. |
 | **Status** | Feature-complete, production-ready product: Docker deploy with automatic HTTPS, Stripe billing, self-serve signup, public demo mode, one-command server install with rollback and backups. |
 
@@ -344,7 +344,7 @@ hard imports. Background work is in Celery with retries. All money math uses `De
 
 ## 8. Engineering quality signals
 
-- **838 automated tests** across 40 files. Every external API (Stripe, QuickBooks, Xero, Microsoft Graph,
+- **838 automated tests** across 40 files, **all green** (837 passed, 1 skipped, 0 failures; full run ≈ 9 min, verified 2026-10-03). Every external API (Stripe, QuickBooks, Xero, Microsoft Graph,
   LLMs) is faked with `httpx.MockTransport`. Tenant isolation, RBAC, security hardening and money math all have dedicated suites.
 - **Labelled evaluation harness** with a synthetic data generator. It produces fictional shipments in multiple
   layouts, scans, photos, ZIPs, batch PDFs, customs forms and vendor statements, with **planted errors**

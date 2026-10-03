@@ -706,7 +706,7 @@ def test_csv_row_errors_import_nothing(org):
     (b"vendor,amount\nX,1\n", "Missing columns: valid_from, currency, charge_code, basis"),
     (",".join(csvio.COLUMNS).encode() + b"\n", "no rows"),
     (b"x" * (csvio.MAX_BYTES + 1), "larger than 2 MB"),
-])
+], ids=["empty", "missing-columns", "no-rows", "too-large"])  # short ids: Windows caps env vars at 32767 chars
 @pytest.mark.django_db
 def test_csv_file_level_errors(org, data, message):
     result = csvio.import_quotes(org, data)

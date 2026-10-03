@@ -278,5 +278,8 @@ def zip_of(entries: dict[str, bytes], compression: int = zipfile.ZIP_DEFLATED) -
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=compression) as zf:
         for name, data in entries.items():
-            zf.writestr(name, data)
+            # Fixed timestamp: the same entries always give the same bytes (and the same SHA-256)
+            info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+            info.compress_type = compression
+            zf.writestr(info, data)
     return out.getvalue()
