@@ -14,3 +14,4 @@ dump.rdb
 real_docs/
 .ccr-ca.crt
 .deploy/
+local-test-accounts.txt
