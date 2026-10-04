@@ -99,7 +99,7 @@ def _limit_with_shares(shipment: Shipment, user) -> list[str]:
 
     org = shipment.organization
     membership = membership_for(user, org)
-    limit = membership.approval_limit if membership and not user.is_superuser else None
+    limit = membership.approval_limit if membership else None
     if limit is None:
         return []
     shares = [r for d in allocation.shared_with(shipment, exclude=shipment.documents.values_list("pk", flat=True))

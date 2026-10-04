@@ -59,8 +59,8 @@ def membership_for(user, org: Organization) -> Membership | None:
 def role_for(user, org: Organization | None) -> str | None:
     if org is None or not getattr(user, "is_authenticated", False) or not user.is_active:
         return None
-    if user.is_superuser:
-        return "admin"
+    # Membership only: a platform superuser has no role in an organization they don't belong to. Support access
+    # means being added as a member (Django admin), which the organization's audit log records.
     m = membership_for(user, org)
     return m.role if m else None
 

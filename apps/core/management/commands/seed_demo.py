@@ -1,7 +1,7 @@
 """Demo organization and users for local evaluation (idempotent; never run against production data).
 
 Users created (change these passwords if the server is reachable by anyone else):
-  admin     / admin                -> Admin (platform superuser)
+  admin     / admin                -> Admin of the demo organization (--superuser also makes it a platform superuser)
   reviewer  / reviewer-demo-pass   -> Reviewer: edits and accepts warnings, cannot approve
   approver  / approver-demo-pass   -> Approver with a 50,000 approval limit
 """
@@ -29,6 +29,9 @@ class Command(BaseCommand):
         parser.add_argument("--password", default="admin")
         parser.add_argument("--email", default="admin@example.com")
         parser.add_argument("--no-demo-users", action="store_true", help="Only create the admin")
+        parser.add_argument("--superuser", action="store_true",
+                            help="Also make the admin a platform superuser (Django admin site; still no access "
+                                 "to organizations it isn't a member of)")
 
     def handle(self, *args, **opts):
         org, _ = Organization.objects.get_or_create(slug=opts["org"], defaults={"name": opts["name"]})
@@ -37,7 +40,8 @@ class Command(BaseCommand):
             org.save(update_fields=["fx_rates"])
         User = get_user_model()
         user, created = User.objects.get_or_create(
-            username=opts["username"], defaults={"email": opts["email"], "is_staff": True, "is_superuser": True})
+            username=opts["username"],
+            defaults={"email": opts["email"], "is_staff": opts["superuser"], "is_superuser": opts["superuser"]})
         if created:
             user.set_password(opts["password"])
             user.save()

@@ -41,7 +41,7 @@ Docker (below) for Postgres + Redis + workers, or `celery -A config worker --poo
 
 | Username | Password | Role | What to try |
 | --- | --- | --- | --- |
-| `admin` | `admin` | Admin, platform superuser | Team, Settings, QuickBooks, API keys, audit log |
+| `admin` | `admin` | Admin of the demo organization | Team, Settings, QuickBooks, API keys, audit log |
 | `reviewer` | `reviewer-demo-pass` | Reviewer | Correct values, move documents, accept warnings |
 | `approver` | `approver-demo-pass` | Approver, limit USD 50,000 | Override errors with a reason, approve, reject |
 
@@ -53,7 +53,7 @@ can reach.
 ```bash
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py seed_demo                      # org "demo" and the demo users below
+python manage.py seed_demo                      # org "demo" and the demo users below (--superuser: admin also gets /admin/)
 python manage.py generate_dataset --out datasets/synthetic --shipments 20 --seed 42 --scanned 3
 python manage.py ingest_folder datasets/synthetic --org demo
 python manage.py runserver                      # http://localhost:8000/
@@ -595,6 +595,7 @@ keep every scope their access level allowed. A request outside a key's scopes ge
 | Control | How it works |
 | --- | --- |
 | Roles | Viewer, Reviewer, Approver, Admin per organization (Team page). Every view and API call checks the role. |
+| Platform admins | Superusers have no access to an organization's data unless they are a member, with that member's role and approval limit. In the platform admin (`/admin/`) they manage organizations, memberships, billing and sign-ups; every client record (documents, shipments, bills, disputes, rates ...) is read only there, an organization's controls (currency, time zone, two-factor, maker-checker, threshold, rates) are fixed once it exists, and organizations can't be deleted. Support access means adding yourself as a member, which the client's audit log shows ("added root as viewer through the platform admin"). |
 | Maker-checker | Whoever uploaded, corrected, moved or accepted issues on a shipment can't approve it (Settings, on by default). |
 | Approval limits | Per person, in the home currency. Foreign invoices are converted with the rates in Settings; with no rate the check fails closed. |
 | Error overrides | Only approvers can override an error, and only with a written reason that is kept in the audit log. Rejections need a reason. |

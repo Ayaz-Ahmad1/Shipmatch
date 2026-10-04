@@ -160,7 +160,8 @@ def test_password_reset_of_demo_accounts_is_blocked(client, demo, mailoutbox):
 @pytest.mark.django_db
 def test_demo_admin_has_no_platform_powers(client, demo):
     admin = get_user_model().objects.get(username="admin")
-    assert admin.is_superuser  # seed_demo makes it one; demo mode never lets it act as one
+    admin.is_superuser = admin.is_staff = True   # as with seed_demo --superuser; demo mode never lets it act as one
+    admin.save()
     sandbox = Organization.objects.create(name="Someone's try upload", slug="try-abc")
     _login(client, "admin")
     r = client.get(reverse("admin:index"), follow=True)

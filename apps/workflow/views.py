@@ -197,7 +197,7 @@ def _quick_context(request, s: Shipment, *, via_link: bool = False, link_expired
         "shipment": s, "totals": shipment_totals(s), "docs": docs, "open_issues": issues,
         "open_errors": sum(1 for i in issues if i.severity == "error"),
         "blockers": blockers, "can_approve": can_approve,
-        "limit": membership.approval_limit if membership and not user.is_superuser else None,
+        "limit": membership.approval_limit if membership else None,
         "decision": s.approvals.select_related("user").order_by("-created_at").first(),
         "assignee": assignment.current_assignee(s), "via_link": via_link, "link_expired": link_expired,
         "next_item": _next_to_approve(user, s) if s.is_locked or s.status == Shipment.Status.REJECTED else None,

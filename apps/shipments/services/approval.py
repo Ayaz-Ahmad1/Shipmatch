@@ -112,7 +112,7 @@ def approval_blockers(shipment: Shipment, user) -> list[str]:
     if org.maker_checker and user.pk in makers(shipment):
         reasons.append("You prepared this shipment, so another approver must approve it (maker-checker rule).")
     membership = membership_for(user, org)
-    limit = membership.approval_limit if membership and not user.is_superuser else None
+    limit = membership.approval_limit if membership else None
     if limit is not None:
         totals = shipment_totals(shipment)
         if totals.home is None:

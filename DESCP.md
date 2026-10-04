@@ -14,7 +14,7 @@
 | **What it is** | A multi-tenant B2B SaaS that automates **accounts payable for import shipments**. It reads messy shipping paperwork from email, groups each document into its shipment, catches overcharges and errors, routes them to human approval, and posts bills to **QuickBooks Online or Xero**. |
 | **Who it's for** | Importers, freight forwarders, customs brokers, logistics companies, and the bookkeeping/accounting firms that serve them. |
 | **Core idea** | AI is used **only to read documents**. Matching, validation and money math are deterministic, testable code. A human approves anything uncertain. |
-| **Size** | **~66,000 hand-written lines of code**: ~42,400 lines of application Python across 18 Django apps, ~12,900 lines of tests (**838 automated tests, all passing**), ~9,600 lines of templates/CSS/JS, ~800 lines of deploy/ops scripts. That excludes auto-generated migrations and vendored libraries. Also 213 URL routes, 154 templates and a 1,200-line operator README. This is the scale of a funded startup's product, not a weekend demo. |
+| **Size** | **~66,000 hand-written lines of code**: ~42,400 lines of application Python across 18 Django apps, ~12,900 lines of tests (**844 automated tests, all passing**), ~9,600 lines of templates/CSS/JS, ~800 lines of deploy/ops scripts. That excludes auto-generated migrations and vendored libraries. Also 213 URL routes, 154 templates and a 1,200-line operator README. This is the scale of a funded startup's product, not a weekend demo. |
 | **Benchmark** | On the bundled 68-document labelled benchmark: **100% field accuracy, 100% document grouping, 100% planted-error detection, 0 false alarms, $0.00 AI cost** (offline rule reader). Measured 2026-10-03. |
 | **Status** | Feature-complete, production-ready product: Docker deploy with automatic HTTPS, Stripe billing, self-serve signup, public demo mode, one-command server install with rollback and backups. |
 
@@ -46,7 +46,7 @@
 > ledger, landed-cost allocation, US customs (CBP 7501) duty and fee checks, vendor dispute letters, month-end
 > accrual journals, vendor statement reconciliation, Stripe subscription billing, signed outgoing webhooks, a
 > REST API, Slack/Teams alerts, and 2FA. It is about 66,000 lines of hand-written code across 18 Django apps,
-> with 838 automated tests and a labelled accuracy benchmark.
+> with 844 automated tests and a labelled accuracy benchmark.
 
 ---
 
@@ -266,7 +266,7 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
 - **Streaming CSV and Excel exports** (row-by-row, 200k rows), protected against formula injection, audited.
 
 ### 4.12 SaaS platform features
-- **Multi-tenancy:** every record scoped to an organization, membership-based access, tenant-isolation tests.
+- **Multi-tenancy:** every record scoped to an organization, membership-based access, tenant-isolation tests. **Even platform superusers can't touch a client's data** without being added as a member, which shows in that client's audit log. The platform admin is read-only for client records.
 - **Self-serve signup:** email verification with signed single-use links, honeypot, IP rate limits (IPv6 /64
   aware), disposable-domain blocking, account-enumeration resistance.
 - **Stripe billing without the SDK:** Checkout, Customer Portal, verified webhooks (HMAC, multi-secret
@@ -286,6 +286,7 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
 - Login lockout (per user and per IP), 30-minute idle timeout, 12+ character passwords with Django validators.
 - **Strict Content Security Policy** (no inline scripts), HSTS, secure cookies, Permissions-Policy, COOP, request IDs.
 - **Immutable audit log** of every sign-in, edit, decision, export and setting change (actor, IP, request ID). CSV export.
+- **Zero-trust platform admin:** operator accounts manage organizations, memberships and billing only. Client records are read-only in `/admin/`, org controls are locked once created, and support access is an audited membership.
 - **SSRF guards** on webhooks, alert channels and IMAP hosts. HMAC verification on every inbound webhook
   (Stripe, Mailgun, Postmark basic auth).
 - CSV/Excel **formula-injection protection**. Zip-bomb and decompression limits. defusedxml.
@@ -309,7 +310,7 @@ documents a month, with a 2–6 person AP team using QuickBooks Online or Xero.
 | Security | cryptography (Fernet), pyotp (TOTP), segno (QR), Django signing |
 | Storage | Local or **S3-compatible** (AWS S3, MinIO) via django-storages |
 | Infra / DevOps | **Docker**, Docker Compose (dev and prod overlays), **gunicorn**, **Caddy** (automatic HTTPS), WhiteNoise, **DigitalOcean** one-command deploy script (firewall, secrets, releases, **rollback**, nightly `pg_dump` backups with rotation) |
-| Quality | **pytest + pytest-django (838 tests)**, httpx.MockTransport fakes for every external API, **Ruff** linting, synthetic ground-truth dataset generator, accuracy evaluation harness |
+| Quality | **pytest + pytest-django (844 tests)**, httpx.MockTransport fakes for every external API, **Ruff** linting, synthetic ground-truth dataset generator, accuracy evaluation harness |
 | Observability | JSON structured logs, request IDs, `/health/` and `/health/ready/` probes |
 
 ---
@@ -344,7 +345,7 @@ hard imports. Background work is in Celery with retries. All money math uses `De
 
 ## 8. Engineering quality signals
 
-- **838 automated tests** across 40 files, **all green** (837 passed, 1 skipped, 0 failures; full run ≈ 9 min, verified 2026-10-03). Every external API (Stripe, QuickBooks, Xero, Microsoft Graph,
+- **844 automated tests** across 41 files, **all green** (843 passed, 1 skipped, 0 failures; full run ≈ 9 min, verified 2026-10-03). Every external API (Stripe, QuickBooks, Xero, Microsoft Graph,
   LLMs) is faked with `httpx.MockTransport`. Tenant isolation, RBAC, security hardening and money math all have dedicated suites.
 - **Labelled evaluation harness** with a synthetic data generator. It produces fictional shipments in multiple
   layouts, scans, photos, ZIPs, batch PDFs, customs forms and vendor statements, with **planted errors**
@@ -396,7 +397,7 @@ backups and rollback · health checks · structured logging.
 | --- | --- |
 | **Total hand-written code** | **~65,800 lines** (excludes auto-generated migrations and vendored PDF.js) |
 | Application Python (excluding migrations and tests) | ~42,400 lines |
-| Test code | ~12,900 lines, **838 tests**, 40 files (test-to-code ratio ≈ 0.3) |
+| Test code | ~12,900 lines, **844 tests**, 41 files (test-to-code ratio ≈ 0.3) |
 | Templates (HTML) | ~6,900 lines across 154 templates |
 | Frontend CSS + JS (own code) | ~1,300 + ~1,400 lines (custom design system, no framework) |
 | Deploy / ops (Dockerfile, Compose, Caddy, deploy and backup scripts) | ~800 lines |
@@ -434,7 +435,7 @@ backups and rollback · health checks · structured logging.
 | Job / project type | Lead with | Also mention |
 | --- | --- | --- |
 | **AI / LLM engineer, document AI, IDP, OCR** | Grounded extraction, structured outputs, rules fallback, evaluation harness with precision/recall, vendor learning, cost tracking, multi-provider | Evidence highlighting, batch PDF splitting, Textract |
-| **Django / Python backend** | 18-app modular monolith, Django Ninja API, Celery jobs, multi-tenancy, RBAC, 838 tests | Idempotency, row locks, registries/plugins |
+| **Django / Python backend** | 18-app modular monolith, Django Ninja API, Celery jobs, multi-tenancy, RBAC, 844 tests | Idempotency, row locks, registries/plugins |
 | **SaaS MVP / full product build** | Signup → trial → Stripe billing → usage limits → onboarding → demo mode → deploy script | Webhooks, API keys, alerts, firm view |
 | **FinTech / accounting automation / AP** | QuickBooks + Xero posting, payment sync, AP aging, maker-checker, approval limits, audit log, month-end accruals, statement reconciliation | Disputes, savings ledger, multi-currency |
 | **QuickBooks / Xero integration** | OAuth (incl. PKCE), idempotent bills/credits, attachments, rate limits, token rotation under row locks, payment read-back | Error translation, provider abstraction |
@@ -468,7 +469,7 @@ backups and rollback · health checks · structured logging.
 
 **Production-minded**
 > ShipMatch ships with 2FA, encryption at rest, a strict CSP, an immutable audit log, SSRF-safe webhooks,
-> Stripe billing, a public demo mode, and a one-command deploy with rollback and nightly backups. It's covered by 838 automated tests.
+> Stripe billing, a public demo mode, and a one-command deploy with rollback and nightly backups. It's covered by 844 automated tests.
 
 ---
 

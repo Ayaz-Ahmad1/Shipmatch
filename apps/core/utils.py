@@ -34,11 +34,9 @@ def _jsonable(value):
 
 
 def orgs_for_user(user):
-    """Organizations a user may access. Superusers see all."""
+    """Organizations a user may access: the ones they are a member of (platform superusers included)."""
     if not getattr(user, "is_authenticated", False):
         return Organization.objects.none()
-    if user.is_superuser:
-        return Organization.objects.all()
     return Organization.objects.filter(memberships__user=user)
 
 
