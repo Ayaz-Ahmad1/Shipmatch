@@ -52,13 +52,14 @@
     {% else %}Nothing has changed since it was locked.{% endif %}
     Locking now creates version {{ next_version }}; version {{ versions.0.version }} stays as it was.
   </div>
-  {% if can_act %}{% include "close/_lock_form.html" with need_note=True %}{% endif %}
+  {% if not period_ended %}<span class="muted">This period hasn't ended yet, so it can't be locked.</span>
+  {% elif can_act and changes.added or can_act and changes.removed or can_act and changes.changed %}{% include "close/_lock_form.html" with need_note=True %}{% endif %}
 </div>
 {% else %}
 <div class="decision ready">{% icon "check" %}
   <div class="grow"><strong>Not locked yet.</strong> Check the lines below, then lock the period. Locking keeps this report as version 1 for auditors, with the journal entry to book.
-    {% if not can_act %}<span class="muted">An approver locks the period.</span>{% endif %}</div>
-  {% if can_act %}{% include "close/_lock_form.html" with need_note=False %}{% endif %}
+    {% if not period_ended %}<span class="muted">This period hasn't ended yet, so it can't be locked.</span>{% elif not can_act %}<span class="muted">An approver locks the period.</span>{% endif %}</div>
+  {% if can_act and period_ended %}{% include "close/_lock_form.html" with need_note=False %}{% endif %}
 </div>
 {% endif %}
 

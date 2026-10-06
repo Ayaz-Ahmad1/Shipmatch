@@ -803,3 +803,63 @@ def test_detection_can_be_switched_off(org, settings):
     settings.SHARED_INVOICE_DETECT = False
     ingest_all(org, synth.scenario(seed=66, legs=2)["files"])
     assert not SharedInvoice.objects.filter(organization=org).exists()
+
+
+# --------------------------------------------------------------------------- QA-003 / QA-024 / QA-025: what the page says
+
+
+def _open_container_error(shipment):
+    return ValidationIssue.objects.create(
+        organization=shipment.organization, shipment=shipment, code="container_not_on_bl", severity="error",
+        message="invoice.pdf: container ABCD1234567 is not on the bill of lading", fingerprint=f"c-{shipment.pk}")
+
+
+def test_container_errors_on_a_shared_invoice_say_the_split_clears_them(client, approver, shared):
+    doc, ships = shared["doc"], shared["ships"]
+    _open_container_error(ships[0])
+    number = doc.field("invoice_number")
+    client.force_login(approver)
+
+    page = client.get(reverse("review:shipment", args=[ships[0].pk])).content.decode()
+    assert "container errors come from shared invoice" in page and number in page
+    assert "they clear by themselves" in page
+
+    client.post(reverse("landed:split_confirm", args=[doc.pk]))
+    page = client.get(reverse("review:shipment", args=[ships[0].pk])).content.decode()
+    assert "container errors come from shared invoice" not in page
+
+
+def test_no_hint_when_the_container_error_has_nothing_to_do_with_a_shared_invoice(client, approver, org):
+    s, _, _ = make_shipment(org, two_products())
+    _open_container_error(s)
+    client.force_login(approver)
+    page = client.get(reverse("review:shipment", args=[s.pk])).content.decode()
+    assert "container errors come from shared invoice" not in page
+
+
+def test_a_ready_shipment_that_cannot_be_approved_is_not_labelled_ready(client, approver, shared):
+    ships = shared["ships"]
+    for s in ships:
+        s.issues.all().update(resolved=True)
+        Shipment.objects.filter(pk=s.pk).update(status="ready")
+    client.force_login(approver)
+
+    page = client.get(reverse("review:shipment", args=[ships[0].pk])).content.decode()
+
+    assert "You can&#x27;t approve this yet" in page or "You can't approve this yet" in page
+    assert "Waiting on a step" in page
+
+
+def test_the_approve_button_asks_for_confirmation_like_the_shortcut(client, approver, approver2, shared):
+    doc, ships = shared["doc"], shared["ships"]
+    for s in ships:
+        s.issues.all().update(resolved=True)
+        Shipment.objects.filter(pk=s.pk).update(status="ready")
+    client.force_login(approver2)
+    client.post(reverse("landed:split_confirm", args=[doc.pk]))
+    client.force_login(approver)
+    page = client.get(reverse("review:shipment", args=[ships[1].pk])).content.decode()
+
+    assert 'data-wf-confirm="wf-approve-dialog"' in page   # the button opens the same dialog as the "a" key
+    assert 'id="wf-approve-dialog"' in page
+    assert "Waiting on a step" not in page

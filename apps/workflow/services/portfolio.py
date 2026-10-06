@@ -164,6 +164,13 @@ class WorkItem:
         return self.shipment.created_at
 
 
+def add_totals(items) -> None:
+    """Payable totals for the rows about to be shown. Done after paging: a person with a few hundred open
+    shipments sees 25 at a time, and working out the other hundreds made the page take seconds."""
+    for i in items:
+        i.totals = shipment_totals(i.shipment)
+
+
 def my_work(user, *, client: str = "", kind: str = "", limit: int = 300) -> tuple[list[WorkItem], list]:
     """Shipments assigned to this person or ready for their approval, across their organizations.
     Returns (items, organizations hidden because they require two-factor)."""
@@ -188,6 +195,4 @@ def my_work(user, *, client: str = "", kind: str = "", limit: int = 300) -> tupl
             if item.can_approve or item.assigned:
                 items[s.pk] = item
     out = sorted(items.values(), key=lambda i: (i.waiting_since, i.shipment.pk))
-    for i in out:
-        i.totals = shipment_totals(i.shipment)
-    return out, hidden
+    return out, hidden   # totals (a query or more per shipment) are added by add_totals for the rows on show only

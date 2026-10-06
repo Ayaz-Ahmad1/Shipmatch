@@ -13,9 +13,10 @@ from apps.mailboxes.models import Mailbox, MailboxMessage
 from apps.mailboxes.services import gmail, imap, inbound, intake, polling
 from apps.mailboxes.services.intake import IncomingAttachment, IncomingEmail
 
+from .pdfs import make_pdf
 from .test_email_imap import FakeIMAP4_SSL, FakeServer, simple_email
 
-PDF = b"%PDF-1.4 settings test invoice"
+PDF = make_pdf("settings test invoice")
 
 
 def page(response) -> str:
@@ -375,3 +376,78 @@ def test_document_page_shows_the_email_it_came_from(client, user, org, dataset):
     doc = Document.objects.get(pk=doc.pk)
     text = page(client.get(reverse("review:shipment", args=[doc.match.shipment_id])))
     assert "Emailed by Lumen Trading <ar@lumen.example>" in text and "received through Forwarding address" in text
+
+
+# ---------------------------------------------------------------- QA-041: a wrong server leaves nothing behind
+
+
+def _imap_form(host, **over):
+    data = {"display_name": "", "host": host, "port": "993", "security": "ssl", "username": "ap@acme.example",
+            "password": "app-password", "folder": "", "allowed_senders": ""}
+    data.update(over)
+    return data
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("host, resolves_to, words", [
+    ("mail.internal.example", "10.0.0.5", "private network"),
+    ("loopback.example", "127.0.0.1", "private network"),
+    ("metadata.example", "169.254.169.254", "private network"),
+    ("carrier-grade.example", "100.64.0.1", "private network"),
+])
+def test_a_private_server_is_refused_and_no_mailbox_is_saved(client, admin_user, org, settings, monkeypatch,
+                                                              host, resolves_to, words):
+    import socket
+
+    settings.MAILBOX_ALLOW_PRIVATE_HOSTS = False
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", (resolves_to, 0))])
+    client.force_login(admin_user)
+
+    r = client.post(reverse("mailboxes:imap_new"), _imap_form(host))
+
+    assert r.status_code == 200 and words in page(r)
+    assert not Mailbox.objects.filter(organization=org).exists()
+    assert not AuditEvent.objects.filter(organization=org, action="mailbox.connected").exists()
+
+
+@pytest.mark.django_db
+def test_a_server_name_that_does_not_exist_is_refused_and_nothing_is_saved(client, admin_user, org, settings,
+                                                                           monkeypatch):
+    import socket
+
+    settings.MAILBOX_ALLOW_PRIVATE_HOSTS = False
+
+    def nxdomain(*args, **kwargs):
+        raise socket.gaierror("not known")
+
+    monkeypatch.setattr(socket, "getaddrinfo", nxdomain)
+    client.force_login(admin_user)
+
+    r = client.post(reverse("mailboxes:imap_new"), _imap_form("imap://evil.example"))
+
+    assert "Couldn't find the server" in page(r) and not Mailbox.objects.filter(organization=org).exists()
+
+
+@pytest.mark.django_db
+def test_a_wrong_password_still_keeps_the_mailbox_for_correcting(client, admin_user, org, fake_imap):
+    """Unchanged on purpose: the server is fine, so the mailbox is saved and the admin fixes the password."""
+    client.force_login(admin_user)
+    client.post(reverse("mailboxes:imap_new"), _imap_form("imap.mail.example", password="nope"))
+    assert Mailbox.objects.filter(organization=org, username="ap@acme.example").exists()
+
+
+@pytest.mark.django_db
+def test_changing_an_existing_mailbox_to_a_private_server_is_refused(client, admin_user, imap_mailbox, settings,
+                                                                     monkeypatch):
+    import socket
+
+    settings.MAILBOX_ALLOW_PRIVATE_HOSTS = False
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("10.1.2.3", 0))])
+    client.force_login(admin_user)
+    before = imap_mailbox.host
+
+    r = client.post(reverse("mailboxes:edit", args=[imap_mailbox.pk]), _imap_form("intranet.example", password=""))
+
+    assert "private network" in page(r)
+    imap_mailbox.refresh_from_db()
+    assert imap_mailbox.host == before

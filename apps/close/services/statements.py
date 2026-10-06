@@ -12,6 +12,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.accounting.models import PostedBill, QBOConnection, VendorMapping, vendor_key
+from apps.core.money import AmountError, parse_amount
 from apps.core.utils import audit
 from apps.documents.models import Document
 from apps.documents.services.ingest import display_name, safe_filename
@@ -69,9 +70,10 @@ class PaymentError(ValueError):
 
 def _amount(raw) -> Decimal:
     try:
-        value = Decimal(str(raw).replace(",", "").strip()).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError):
-        raise PaymentError("Type the amount as a number, for example 2535.00.") from None
+        value = parse_amount(raw, allow_negative=True)
+    except AmountError as e:
+        raise PaymentError("That amount is too large. Check the number." if e.kind == "range"
+                           else "Type the amount as a number, for example 2535.00.") from None
     if value <= 0:
         raise PaymentError("A payment amount must be more than zero.")
     return value
@@ -117,7 +119,7 @@ def record_payment(org, user, *, vendor_name: str, paid_on, amount, currency: st
     if day > timezone.localdate() + timedelta(days=1):
         raise PaymentError("The payment date is in the future. Record payments once they are made.")
     value = _amount(amount)
-    cur = (currency or org.home_currency).strip().upper()[:3]
+    cur = (currency or org.home_currency).strip().upper()   # not cut to 3 letters: "DOLLARS" is an error, not "DOL"
     if len(cur) != 3 or not cur.isalpha():
         raise PaymentError("Type the currency as a three-letter code, for example USD.")
     numbers = [n for n in (invoices or "").replace(";", ",").replace("\n", ",").split(",") if n.strip()]

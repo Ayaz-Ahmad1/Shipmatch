@@ -597,6 +597,7 @@ def my_work(request):
     kind = kind if kind in ("assigned", "approve") else ""
     items, hidden = portfolio.my_work(request.user, client=client, kind=kind)
     page = Paginator(items, PER_PAGE).get_page(request.GET.get("page"))
+    portfolio.add_totals(page.object_list)
     params = request.GET.copy()
     params.pop("page", None)
     return render(request, "workflow/my_work.html", {

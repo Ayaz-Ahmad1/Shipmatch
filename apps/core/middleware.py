@@ -6,7 +6,7 @@ import re
 import time
 import uuid
 import zoneinfo
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 from django.conf import settings
 from django.contrib import messages
@@ -14,6 +14,7 @@ from django.contrib.auth import logout
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .context import client_ip_var, request_id_var
 from .models import Organization
@@ -176,4 +177,37 @@ class SecurityHeadersMiddleware:
         if (response.get("Content-Type", "").startswith("text/html")
                 and not request.path.startswith(self.EXEMPT_PREFIXES)):
             response.setdefault("Content-Security-Policy", self.policy)
+        return response
+
+
+class LoginNextMiddleware:
+    """After a signed-out person submits a form, send them back to the page they were on, not to the form's URL.
+
+    Django (and the idle timeout) remember the address that was requested as the place to return to after
+    sign-in. For a form submission that address only accepts POST, so signing in again ended on an empty
+    "405 Method Not Allowed" page. The page the form was on (the Referer, same site only) is what the person
+    wants back; without one they simply go to the dashboard."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.method != "POST" or response.status_code != 302:
+            return response
+        login_path = reverse(settings.LOGIN_URL)
+        target = urlsplit(response["Location"])
+        if target.path != login_path or parse_qs(target.query).get("next", [""])[0] not in (
+                request.path, request.get_full_path()):
+            return response
+        referer = request.META.get("HTTP_REFERER", "")
+        back = urlsplit(referer)
+        usable = (referer and url_has_allowed_host_and_scheme(referer, allowed_hosts={request.get_host()},
+                                                              require_https=request.is_secure())
+                  and back.path.startswith("/") and back.path != request.path)
+        if usable:
+            nxt = back.path + ("?" + back.query if back.query else "")
+            response["Location"] = f"{login_path}?{urlencode({'next': nxt}, safe='/')}"
+        else:
+            response["Location"] = login_path
         return response

@@ -70,6 +70,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "apps.core.middleware.LoginNextMiddleware",   # a form posted after the session ended returns to its page, not to the POST-only URL
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.core.middleware.IdleTimeoutMiddleware",
     "apps.demo.middleware.DemoModeMiddleware",   # DEMO_MODE guard rails; must run before the organization is chosen
@@ -138,6 +139,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "accounts:login"
+CSRF_FAILURE_VIEW = "apps.core.errors.csrf_failure"
 LOGIN_REDIRECT_URL = "core:dashboard"
 LOGOUT_REDIRECT_URL = "accounts:login"
 

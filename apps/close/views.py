@@ -25,6 +25,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.accounting.models import QBOConnection, vendor_key
+from apps.core.money import AmountError, parse_amount
 from apps.core.permissions import has_perm, require
 from apps.core.utils import audit, current_org
 from apps.documents.services.ingest import RejectedFile
@@ -55,12 +56,15 @@ BUCKET_HELP = {
 }
 
 
-def _period(raw: str | None) -> date:
+def _period(raw: str | None, request=None) -> date:
+    """The period asked for, or the last month-end. With `request`, a value that isn't a date says so instead
+    of silently showing a different month."""
     if raw:
         try:
             return date.fromisoformat(raw)
         except ValueError:
-            pass
+            if request is not None:
+                messages.warning(request, f"“{raw[:30]}” isn't a date, so the latest month-end is shown.")
     return accruals.previous_month_end()
 
 
@@ -82,7 +86,7 @@ def index(request):
 def accrual_report(request):
     org = current_org(request)
     require(request.user, org, "audit")
-    period = _period(request.GET.get("period"))
+    period = _period(request.GET.get("period"), request)
     versions = list(AccrualSnapshot.objects.filter(organization=org, period_end=period)
                     .select_related("locked_by").order_by("-version"))
     snapshot, live = None, request.GET.get("live") == "1" or not versions
@@ -120,6 +124,7 @@ def accrual_report(request):
         "journal_total": journal_total, "cfg": cfg, "month_ends": month_ends,
         "custom_period": period not in month_ends, "attention": attention,
         "can_act": has_perm(request.user, org, "approve"),
+        "period_ended": period < timezone.localdate(),   # a period can be locked only after its last day
         "next_version": (versions[0].version + 1) if versions else 1,
         "query": f"period={period.isoformat()}" + (f"&version={snapshot.version}" if snapshot else "&live=1"),
     })
@@ -181,9 +186,15 @@ def accruals_journal(request):
 def lock_period(request):
     org = current_org(request)
     require(request.user, org, "approve")
-    period = _period(request.POST.get("period"))
+    # A lock is permanent, so the period must be named exactly: a missing or garbled value must never fall back
+    # to "the latest month-end" and lock that.
+    try:
+        period = date.fromisoformat(request.POST.get("period", "").strip())
+    except ValueError:
+        messages.error(request, "Choose which period to lock. Nothing was locked.")
+        return redirect(reverse("close:accruals"))
     url = f"{reverse('close:accruals')}?period={period.isoformat()}"
-    if period > timezone.localdate():
+    if period >= timezone.localdate():   # "period ending 4 Oct" ends when 4 Oct is over
         messages.error(request, "This period hasn't ended yet. Lock a period after its last day.")
         return redirect(url + "&live=1")
     try:
@@ -220,9 +231,12 @@ def adjust(request):
     amount, vendor = None, (request.POST.get("vendor") or "").strip()[:200]
     if action == AccrualAdjustment.Action.AMOUNT:
         try:
-            amount = Decimal((request.POST.get("amount") or "").replace(",", "").strip()).quantize(Decimal("0.01"))
-        except (InvalidOperation, ValueError):
+            amount = parse_amount(request.POST.get("amount"))
+        except AmountError as e:
             amount = None
+            if e.kind == "range":
+                messages.error(request, "That amount is too large. Check the number.")
+                return redirect(url)
         if amount is None or amount <= 0:
             messages.error(request, "Type the expected amount as a number above zero, for example 1850.00.")
             return redirect(url)
@@ -432,11 +446,12 @@ def statement_edit(request, pk: int):
     if cur and (len(cur) != 3 or not cur.isalpha()):
         messages.error(request, "Type the currency as a three-letter code, for example USD.")
         return redirect("close:statement", pk=st.pk)
-    raw_closing = (request.POST.get("closing_balance") or "").replace(",", "").strip()
+    raw_closing = (request.POST.get("closing_balance") or "").strip()
     try:
-        closing = Decimal(raw_closing).quantize(Decimal("0.01")) if raw_closing else None
-    except (InvalidOperation, ValueError):
-        messages.error(request, "Type the closing balance as a number, for example 12500.00, or leave it empty.")
+        closing = parse_amount(raw_closing, allow_negative=True) if raw_closing else None
+    except AmountError as e:
+        messages.error(request, "That balance is too large. Check the number." if e.kind == "range"
+                       else "Type the closing balance as a number, for example 12500.00, or leave it empty.")
         return redirect("close:statement", pk=st.pk)
     st.set_vendor(name)
     st.statement_date, st.currency, st.closing_balance = day, cur or org.home_currency, closing

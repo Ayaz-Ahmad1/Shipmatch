@@ -125,3 +125,35 @@ def test_openapi_describes_scopes_and_new_endpoints(client, admin_user, org):
     assert "/api/{org}/documents" in paths and "get" in paths["/api/{org}/documents"]
     assert "/api/{org}/exports/{kind}" in paths
     assert "exports:read" in paths["/api/{org}/exports/{kind}"]["get"]["description"]
+
+
+# --------------------------------------------------------------------------- QA-004: the reference page must render
+
+
+def test_openapi_document_has_no_duplicate_keys(client):
+    """Swagger UI parses the spec as YAML and refuses a mapping that repeats a key, so the whole API reference
+    page showed "Unable to render this definition". The export operation listed its 200 response twice."""
+    import json
+
+    def reject_duplicates(pairs):
+        keys = [k for k, _ in pairs]
+        repeated = sorted({k for k in keys if keys.count(k) > 1})
+        assert not repeated, f"duplicate keys {repeated} in {keys}"
+        return dict(pairs)
+
+    r = client.get("/api/openapi.json")
+    assert r.status_code == 200
+    spec = json.loads(r.content.decode(), object_pairs_hook=reject_duplicates)
+    export = spec["paths"]["/api/{org}/exports/{kind}"]["get"]["responses"]
+    assert set(export) >= {"200", "400"}
+    assert "text/csv" in export["200"]["content"]
+
+
+def test_openapi_has_a_version_and_every_operation_has_a_response(client):
+    import json
+
+    spec = json.loads(client.get("/api/openapi.json").content.decode())
+    assert spec["openapi"].startswith("3.")
+    for path, methods in spec["paths"].items():
+        for method, op in methods.items():
+            assert op.get("responses"), f"{method} {path} has no responses"

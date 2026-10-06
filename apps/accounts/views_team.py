@@ -19,12 +19,14 @@ from django.utils.http import urlsafe_base64_encode
 from django.views.decorators.http import require_POST
 
 from apps.core.models import Membership, Organization
+from apps.core.money import AmountError, parse_amount
 from apps.core.permissions import require
 from apps.core.utils import audit, current_org, use_org
 
 from . import invitations
 from .services import mfa
 
+MAX_LIMIT = Decimal("999999999999.99")   # Membership.approval_limit is DecimalField(max_digits=14, decimal_places=2)
 SHARED_ACCOUNT = ("{name} also belongs to other organizations, so only {name} can change the password or "
                   "two-factor setup of this account. They can use “Forgot your password?” on the sign-in page.")
 
@@ -39,13 +41,14 @@ def is_shared(membership: Membership) -> bool:
 
 
 def _limit(raw: str) -> Decimal | None:
-    raw = (raw or "").replace(",", "").strip()
+    raw = (raw or "").strip()
     if not raw:
         return None
     try:
-        value = Decimal(raw).quantize(Decimal("0.01"))
-    except InvalidOperation:
-        raise ValueError("Approval limit must be a number, or empty for no limit.")
+        value = parse_amount(raw, allow_negative=True, limit=MAX_LIMIT)
+    except AmountError as e:
+        raise ValueError("Approval limit is too large." if e.kind == "range"
+                         else "Approval limit must be a number, or empty for no limit.") from None
     if value < 0:
         raise ValueError("Approval limit can't be negative.")
     return value

@@ -307,7 +307,7 @@ def get_shipment(request, org: str, shipment_id: int):
 
 @api.get("/{org}/exports/{kind}", response={200: None, 400: ErrorOut},
          summary="Download an export: shipments, documents or issues, as CSV or Excel",
-         openapi_extra={"responses": {"200": {"description": "The file", "content": {
+         openapi_extra={"responses": {200: {"description": "The file", "content": {
              "text/csv": {"schema": {"type": "string"}},
              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
                  "schema": {"type": "string", "format": "binary"}}}}}})

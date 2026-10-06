@@ -256,11 +256,16 @@ def shipment_detail(request, pk):
                      "open_issues": [i for i in issues if i.document_id == d.pk and not i.resolved]})
     blockers = approval_blockers(shipment, request.user) if not shipment.is_locked else []
     open_issues = [i for i in issues if not i.resolved]
+    pending_splits = []
+    if not shipment.is_locked and any(i.code == "container_not_on_bl" for i in open_issues):
+        from apps.landed.services.rules import unconfirmed_splits
+
+        pending_splits = unconfirmed_splits(shipment)   # confirming the split clears those container errors
     return render(request, "review/shipment.html", {
         "shipment": shipment, "docs": docs, "open_issues": open_issues,
         "resolved_issues": [i for i in issues if i.resolved],
         "open_errors": sum(1 for i in open_issues if i.severity == "error"),
-        "blockers": blockers, "totals": shipment_totals(shipment),
+        "blockers": blockers, "pending_splits": pending_splits, "totals": shipment_totals(shipment),
         "timeline": timeline(shipment), "qbo": active_connection(org),
         "approvals": shipment.approvals.select_related("user").order_by("-created_at"),
         "other_shipments": Shipment.objects.filter(organization=org).exclude(pk=shipment.pk)
