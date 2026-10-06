@@ -1,10 +1,11 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import views, views_team
 
 app_name = "accounts"
 urlpatterns = [
+    path("invitations/<str:token>/", views_team.accept_invite, name="accept_invite"),
     path("login/", views.login_view, name="login"),
     path("login/verify/", views.verify_view, name="verify"),
     path("logout/", views.logout_view, name="logout"),

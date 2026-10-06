@@ -23,7 +23,7 @@ from apps.core.permissions import require
 from apps.core.utils import audit, current_org, orgs_for_user, use_org
 from apps.documents.models import Document
 from apps.documents.schemas import SCHEMAS, TABLE_FIELDS
-from apps.documents.services.corrections import EDITABLE, after_correction, correct_field
+from apps.documents.services.corrections import EDITABLE, FieldValueError, after_correction, correct_field
 from apps.documents.services.ingest import RejectedFile, ingest_bytes
 from apps.shipments.models import Approval, Shipment, ValidationIssue
 from apps.shipments.services.approval import approval_blockers, posting_blockers, shipment_totals
@@ -327,6 +327,9 @@ def update_field(request, pk):
         return _after_doc_change(doc)
     try:
         changed = correct_field(doc, name, request.POST.get("value", ""), request.user)
+    except FieldValueError as e:
+        messages.error(request, str(e))
+        return _after_doc_change(doc)
     except ValueError:
         messages.error(request, f"{label(name)} can't be edited.")
         return _after_doc_change(doc)

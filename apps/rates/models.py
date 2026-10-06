@@ -284,5 +284,12 @@ class CaughtCharge(models.Model):
         unique_together = [("organization", "scope", "catch_key")]
         ordering = ["-first_caught_at", "-id"]
 
+    def save(self, *args, **kwargs):
+        from apps.core.utils import clamp_money
+
+        self.amount_caught = clamp_money(self.amount_caught)   # see ValidationIssue.save
+        self.amount_latest = clamp_money(self.amount_latest)
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"{self.catch_key} {self.currency} {self.amount_caught}"
