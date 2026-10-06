@@ -26,7 +26,7 @@ from django.db import transaction
 
 from apps.core.utils import audit
 from apps.documents.models import Document
-from apps.documents.services.ingest import RejectedFile, dispatch, ingest_bytes, safe_filename
+from apps.documents.services.ingest import RejectedFile, dispatch, ingest_bytes, safe_filename, store_unique
 
 from . import formats
 
@@ -199,7 +199,7 @@ def ingest_archive(org, filename: str, content: bytes, sha: str, *, source: str,
                                source_format=Document.Format.ARCHIVE, status=Document.Status.ARCHIVE, parent=parent)
             archive.original_file.save(safe_filename(filename), ContentFile(content), save=False)
             budget.saved.append(archive.original_file.name)
-            archive.save()
+            store_unique(archive)
             for m in members:
                 if m.status != "accepted":
                     continue

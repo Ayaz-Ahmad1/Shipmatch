@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import traceback
 
 from django.conf import settings
 from django.db import OperationalError, transaction
@@ -13,6 +12,7 @@ from apps.learning.services.apply import learning_for
 
 from . import llm, locate
 from .classify import classify
+from .errors import friendly, scrub
 from .extract import extract
 from .ocr import TextResult
 
@@ -90,9 +90,9 @@ def process_document(doc_id: int, force_type: str | None = None) -> Document:
     except Exception as e:  # keep the document visible in the queue with the error
         log.exception("Processing failed for document %s", doc_id)
         doc.status = Document.Status.ERROR
-        doc.error = f"{e}\n{traceback.format_exc()[-2000:]}"
+        doc.error = friendly(e)   # the details are in the log above, never on a page
         doc.save(update_fields=["status", "error", "updated_at"])
-        audit(doc.organization, "document.error", doc, error=str(e)[:300])
+        audit(doc.organization, "document.error", doc, error=scrub(str(e))[:300])
     doc.refresh_from_db()
     return doc
 

@@ -19,9 +19,11 @@ from apps.mailboxes.models import Mailbox, MailboxMessage
 from apps.mailboxes.services import microsoft
 from apps.mailboxes.services.polling import poll_mailbox
 
-PDF_A = b"%PDF-1.4 commercial invoice CI-55"
-PDF_B = b"%PDF-1.4 freight invoice FI-56"
-PDF_BIG = b"%PDF-1.4 " + b"x" * 5000
+from .pdfs import make_pdf
+
+PDF_A = make_pdf("commercial invoice CI-55")
+PDF_B = make_pdf("freight invoice FI-56")
+PDF_BIG = make_pdf("scan") + b"\n%" + b"x" * 5000 + b"\n"   # a real PDF, padded to a few KB (comments after %%EOF are legal)
 LOGO = b"\x89PNG" + b"\x00" * 3000
 
 

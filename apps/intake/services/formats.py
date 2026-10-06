@@ -94,6 +94,43 @@ def detect(filename: str, content: bytes) -> Kind:
     raise RejectedFile(f"{filename}: not a PDF, image, spreadsheet or ZIP file. Send {SUPPORTED_TEXT} files.")
 
 
+def check_pdf(filename: str, content: bytes) -> None:
+    """Refuse a file that only starts like a PDF: damaged or cut short, or protected by a password.
+
+    A file is accepted when either PDF reader can open it, because the two repair damaged files differently and
+    the one that reads the pages later is pdfplumber; a password-protected file needs the password, which
+    nobody can give a mailbox importer, so it is refused with the way to remove it."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(content), strict=False)
+        if reader.is_encrypted and not reader.decrypt(""):   # many "protected" PDFs open with an empty password
+            raise _PasswordProtected
+        if len(reader.pages) > 0:
+            return
+    except _PasswordProtected:
+        raise RejectedFile(f"{filename}: this PDF is protected with a password. Open it, choose Print > Save as PDF "
+                           "to make an unprotected copy, and send that.") from None
+    except Exception:   # pypdf raises many kinds of errors for broken files; fall back to the other reader
+        pass
+    try:
+        import pdfplumber
+
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            if len(pdf.pages) > 0:
+                return
+    except Exception as e:
+        if type(e).__name__ in ("PDFPasswordIncorrect", "PDFEncryptionError"):
+            raise RejectedFile(f"{filename}: this PDF is protected with a password. Open it, choose Print > Save as "
+                               "PDF to make an unprotected copy, and send that.") from None
+    raise RejectedFile(f"{filename}: this file isn't a readable PDF. It may be damaged or cut short. Open the "
+                       "original, save it as PDF again, and send that.")
+
+
+class _PasswordProtected(Exception):
+    pass
+
+
 def _zip_kind(filename: str, content: bytes) -> Kind:
     """ZIP containers: an Excel workbook, another Office file, or a plain archive of documents."""
     try:

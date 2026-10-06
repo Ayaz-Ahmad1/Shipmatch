@@ -18,11 +18,13 @@ from apps.mailboxes.services import imap
 from apps.mailboxes.services.mime import imap_quote, imap_utf7_decode, imap_utf7_encode, parse_message
 from apps.mailboxes.services.polling import poll_mailbox
 
-PDF_1 = b"%PDF-1.4 invoice one"
-PDF_2 = b"%PDF-1.4 invoice two"
-PDF_3 = b"%PDF-1.4 bill of lading three"
-PDF_FWD = b"%PDF-1.4 forwarded freight invoice"
-PDF_DE = b"%PDF-1.4 Rechnung Fracht"
+from .pdfs import make_pdf
+
+PDF_1 = make_pdf("invoice one")
+PDF_2 = make_pdf("invoice two")
+PDF_3 = make_pdf("bill of lading three")
+PDF_FWD = make_pdf("forwarded freight invoice")
+PDF_DE = make_pdf("Rechnung Fracht")
 
 
 def simple_email(n: int, pdf: bytes | None, sender="billing@harborlink.example") -> bytes:

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load ui %}
+{% load ui review_tags %}
 {% block title %}Documents{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -41,7 +41,7 @@
         <tr>
           <td><a class="row-link wrap" href="{% url 'review:document' d.pk %}">{{ d.original_filename }}</a>
             {% if d.status == 'needs_ocr' %}<span class="sub">Scanned image: turn on OCR or type the key fields</span>
-            {% elif d.status == 'error' %}<span class="sub">{{ d.error|truncatechars:90 }}</span>
+            {% elif d.status == 'error' %}<span class="sub">{{ d.error|doc_error|truncatechars:90 }}</span>
             {% elif d.status == 'unmatched' %}<span class="sub">No B/L, container or PO number found</span>
             {% elif d.status == 'received' %}<span class="sub">Being read now</span>{% endif %}
             {% include "intake/_list_origin.html" %}

@@ -15,9 +15,11 @@ from apps.documents.models import Document, IngestedEmail
 from apps.mailboxes.models import EmailAttachment, Mailbox, MailboxMessage
 from apps.mailboxes.services import inbound
 
+from .pdfs import make_pdf
+
 DOMAIN = "in.shipmatch.test"
-PDF = b"%PDF-1.4\n% freight invoice FI-1001\n"
-PDF2 = b"%PDF-1.4\n% bill of lading HLB-777\n"
+PDF = make_pdf("freight invoice FI-1001")
+PDF2 = make_pdf("bill of lading HLB-777")
 LOGO = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20_000   # a 20 KB signature logo
 KEY = "mg-signing-key-test"
 

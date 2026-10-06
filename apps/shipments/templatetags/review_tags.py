@@ -14,6 +14,14 @@ def show(value):
 
 
 @register.filter
+def doc_error(value):
+    """A document's stored processing error in plain language, never a traceback or a server path."""
+    from apps.documents.services.errors import display
+
+    return display(value)
+
+
+@register.filter
 def as_input(value):
     if value in (None, []):
         return ""
