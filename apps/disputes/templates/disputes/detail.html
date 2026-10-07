@@ -135,6 +135,7 @@
           <p class="hint">Upload the vendor's credit note in Documents first to link it here.</p></div>
         <div><label class="lbl" for="credit-note">Note <span class="muted small">(optional)</span></label>
           <input class="w-full" id="credit-note" type="text" name="note" maxlength="500" placeholder="For example: credit note CN-2291 applied to the next statement"></div>
+        <label class="check"><input type="checkbox" name="confirm_over"><span>The credit is higher than the amount disputed, and I have checked it<span class="sub">Only needed when the amount above is more than {{ dispute.amount_disputed|money:dispute.currency }}.</span></span></label>
         <label class="check"><input type="checkbox" name="settles" checked><span>This settles the dispute<span class="sub">Untick if the vendor still owes part of it.</span></span></label>
         <div><button class="btn btn-sm btn-primary" type="submit">Save credit</button></div>
         {% if not shipment_locked and dispute.shipment_id %}<p class="hint">Disputed issues still open on {{ dispute.shipment_reference }} are marked resolved, in your name.</p>{% endif %}

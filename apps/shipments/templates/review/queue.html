@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load ui %}
-{% block title %}Review queue{% endblock %}
+{% block title %}Review queue{% for k, label, n in tabs %}{% if k == tab %} – {{ label }}{% endif %}{% endfor %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>

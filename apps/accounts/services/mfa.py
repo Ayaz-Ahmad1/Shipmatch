@@ -73,7 +73,10 @@ def new_recovery_codes(user) -> list[str]:
 
 def use_recovery_code(user, code: str) -> bool:
     profile = profile_for(user)
-    h = _hash(code.strip().lower())
+    hex_only = "".join(ch for ch in (code or "").lower() if ch in "0123456789abcdef")
+    if len(hex_only) != 12:   # a code is 6 + 6 hex digits; spaces, dashes and capitals are not required
+        return False
+    h = _hash(f"{hex_only[:6]}-{hex_only[6:]}")
     if h in profile.recovery_codes:
         profile.recovery_codes = [c for c in profile.recovery_codes if c != h]
         profile.save(update_fields=["recovery_codes"])

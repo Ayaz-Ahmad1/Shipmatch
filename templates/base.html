@@ -93,7 +93,7 @@
       </details>
     </header>
 
-    <main id="main" class="content">
+    <main id="main" tabindex="-1" class="content">
       {% include "billing/_banner.html" %}
       {% include "includes/messages.html" %}
       {% block content %}{% endblock %}
@@ -101,7 +101,7 @@
   </div>
 </div>
 {% else %}
-<main id="main" class="content">
+<main id="main" tabindex="-1" class="content">
   {% include "includes/messages.html" %}
   {% block public_content %}{% endblock %}
 </main>

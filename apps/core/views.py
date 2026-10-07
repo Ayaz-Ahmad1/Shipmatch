@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.files.storage import default_storage
-from django.core.paginator import Paginator
+from apps.core.paging import Paginator
 from django.db import connection
 from django.db.models import Q
 from django.http import JsonResponse, StreamingHttpResponse
@@ -22,7 +22,7 @@ from django.views.decorators.http import require_POST
 from apps.accounting.services.providers import active_connection
 from apps.accounts.models import ApiKey
 from apps.accounts.services.apikeys import create_key
-from apps.core import csvsafe
+from apps.core import csvsafe, timezones
 from apps.shipments.labels import describe_action
 
 from . import dashboard as dash
@@ -201,13 +201,16 @@ def _parse_rates(raw: str) -> dict:
 def org_settings(request):
     org = current_org(request)
     require(request.user, org, "manage")
-    zones = sorted(z for z in zoneinfo.available_timezones() if "/" in z and not z.startswith(("Etc/", "SystemV/")))
+    zones = timezones.choices(org.timezone)
     if request.method == "POST":
         p = request.POST
         try:
             name = p.get("name", "").strip()
             if not name:
                 raise ValueError("Organization name can't be empty.")
+            if len(name) > org._meta.get_field("name").max_length:
+                raise ValueError(f"Organization name can be at most {org._meta.get_field('name').max_length} "
+                                 f"characters (you typed {len(name)}).")
             currency = p.get("home_currency", "").strip().upper()
             if len(currency) != 3 or not currency.isalpha():
                 raise ValueError("Home currency must be a 3-letter code such as USD.")

@@ -26,7 +26,7 @@
         <tr>
           <td><a class="row-link" href="{% url 'review:shipment' p.shipment.pk %}">{{ p.shipment.reference }}</a></td>
           <td>{% include "includes/status.html" with s=p.shipment %}</td>
-          <td class="num nowrap">{% for cur, amount in p.totals.by_currency.items %}{{ amount|money:cur }}{% if not forloop.last %}<br>{% endif %}{% empty %}–{% endfor %}</td>
+          <td class="num nowrap">{% for cur, amount in p.totals.by_currency.items %}<div>{{ amount|money:cur }}</div>{% empty %}–{% endfor %}</td>
           <td>{% if p.ok %}<span class="tag ok">{% icon "check" %} {% if action == "approve" %}Will be approved{% else %}Will be posted{% endif %}</span>
             {% else %}<span class="tag warning">{% icon "alert" %} Will be skipped</span>
               <ul class="wf-reasons">{% for r in p.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}</td>

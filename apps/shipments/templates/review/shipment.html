@@ -6,7 +6,7 @@
 <div class="page-head">
   <div>
     <div class="crumbs"><a href="{% url 'review:queue' %}?status={{ shipment.status }}">Review queue</a>{% icon "chevron-right" %}<span>{{ shipment.reference }}</span></div>
-    <div class="actions" style="gap:12px"><h1>{{ shipment.reference }}</h1>{% include "includes/status.html" with s=shipment %}</div>
+    <div class="actions" style="gap:12px"><h1>{{ shipment.reference }}</h1>{% if shipment.status == "ready" and blockers %}<span class="badge warn" title="Every check passed or was accepted, but something else has to happen before it can be approved. See the box below.">Waiting on a step</span>{% else %}{% include "includes/status.html" with s=shipment %}{% endif %}</div>
     <dl class="meta-grid">
       <div><dt>Bill of lading</dt><dd>{{ shipment.bl_number|default:"Not received" }}</dd></div>
       <div><dt>Containers</dt><dd>{{ shipment.container_numbers|join:", "|default:"–" }}</dd></div>
@@ -28,7 +28,8 @@
 {% elif shipment.status == "approved" %}
   <div class="decision done">{% icon "check" %}
     <div class="grow"><strong>Approved</strong> by {{ shipment.approved_by|display_name }} on {{ shipment.approved_at|date:"j M Y, H:i" }}.
-      The shipment is locked. {% if can.post %}Post its bills when you're ready.{% endif %}</div>
+      The shipment is locked. {% if can.post %}Post its bills when you're ready.{% endif %}
+      {% if post_summary %}<br><strong>{{ post_summary.posted }} of {{ post_summary.total }} bill{{ post_summary.total|pluralize }} posted{% if post_summary.failed %}; {{ post_summary.failed }} failed{% endif %}.</strong>{% if post_summary.failed %} The reason is on the document card below.{% endif %}{% endif %}</div>
     <div class="decision-actions">
       {% if can.post %}
         {% if qbo and qbo.needs_reconnect %}
@@ -69,7 +70,7 @@
         </form>
       </details>
       {% if not blockers %}
-      <form method="post" action="{% url 'review:approve' shipment.pk %}">{% csrf_token %}
+      <form method="post" action="{% url 'review:approve' shipment.pk %}" data-wf-confirm="wf-approve-dialog">{% csrf_token %}
         <button class="btn btn-primary" type="submit">{% icon "check" %} Approve</button>
       </form>
       {% else %}<button class="btn btn-primary" type="button" disabled>{% icon "check" %} Approve</button>{% endif %}
@@ -86,7 +87,8 @@
 <section class="card" id="issues" style="margin-bottom:20px">
   <div class="card-head">
     <div><h2>{% if open_issues %}Issues to resolve <span class="muted num">{{ open_issues|length }}</span>{% else %}All issues resolved{% endif %}</h2>
-      <p>Fix a value in the document below, or accept the issue if the document is right.{% if open_errors %} Errors need an approver to override them.{% endif %}</p></div>
+      <p>Fix a value in the document below, or accept the issue if the document is right.{% if open_errors %} Errors need an approver to override them.{% endif %}</p>
+      {% if pending_splits %}<p class="hint">The container errors come from shared invoice {{ pending_splits|join:", " }}, which also covers other shipments. Confirm the split under <a href="#shared-invoices">Shared invoices</a> and they clear by themselves.</p>{% endif %}</div>
   </div>
   {% for i in open_issues %}
   <div class="issue">

@@ -59,6 +59,17 @@ def parse_mentions(org, body: str) -> list:
     return found
 
 
+def unknown_mentions(org, body: str) -> list[str]:
+    """@names in body that are not members of org, so nobody was notified for them."""
+    members = members_by_username(org)
+    out: list[str] = []
+    for m in MENTION_RE.finditer(body or ""):
+        name = _token(m.group(1))
+        if name and name.lower() not in members and name not in out:
+            out.append(name)
+    return out
+
+
 def render(comment: Comment) -> str:
     """Comment text as safe HTML: escaped, line breaks kept, recognised mentions highlighted."""
     if comment.is_deleted:

@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core import signing
 from django.core.exceptions import PermissionDenied
-from django.core.paginator import Paginator
+from apps.core.paging import Paginator
 from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -21,6 +21,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST, require_safe
 
 from apps.accounting.models import vendor_key
+from apps.core import timezones
 from apps.core.models import Membership, Organization
 from apps.core.permissions import has_perm, membership_for, require
 from apps.core.utils import audit, current_org, orgs_for_user, use_org
@@ -330,6 +331,11 @@ def comment_create(request):
     mentioned = c.mentions.exclude(pk=request.user.pk).count()
     messages.success(request, "Comment posted." + (f" {mentioned} {'person was' if mentioned == 1 else 'people were'}"
                                                    " notified." if mentioned else ""))
+    unknown = comments.unknown_mentions(org, body)
+    if unknown:
+        shown = ", ".join("@" + n for n in unknown[:3])
+        messages.info(request, f"{shown} {'is' if len(unknown) == 1 else 'are'} not a member of this organization, "
+                               "so nobody was notified. Pick a name from the list that appears after typing @.")
     return redirect(_comment_back(request, c, default))
 
 
@@ -567,7 +573,7 @@ def client_list(request):
 def _zones():
     import zoneinfo
 
-    return sorted(z for z in zoneinfo.available_timezones() if "/" in z and not z.startswith(("Etc/", "SystemV/")))
+    return timezones.choices()
 
 
 @login_required
@@ -597,6 +603,7 @@ def my_work(request):
     kind = kind if kind in ("assigned", "approve") else ""
     items, hidden = portfolio.my_work(request.user, client=client, kind=kind)
     page = Paginator(items, PER_PAGE).get_page(request.GET.get("page"))
+    portfolio.add_totals(page.object_list)
     params = request.GET.copy()
     params.pop("page", None)
     return render(request, "workflow/my_work.html", {

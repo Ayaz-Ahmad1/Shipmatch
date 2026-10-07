@@ -55,18 +55,21 @@ def journal_lines(report: dict) -> tuple[list[dict], Decimal]:
     for ln in counted(report["lines"]):
         key = (ln["account_name"], ln["account_id"], ln["vendor_name"])
         sums[key] += Decimal(ln["amount_home"])
-        meta.setdefault(key, {"shipments": set(), "estimated": False})
+        meta.setdefault(key, {"shipments": set(), "estimated": False, "goods": True})
         if ln["shipment_ref"]:
             meta[key]["shipments"].add(ln["shipment_ref"])
         meta[key]["estimated"] |= ln["kind"] == "estimate"
+        meta[key]["goods"] &= ln["group"] == "goods"
     rows = []
     for (account, account_id, vendor), amount in sorted(sums.items(), key=lambda kv: (kv[0][0], kv[0][2])):
         if amount == 0:
             continue
         ships = sorted(meta[(account, account_id, vendor)]["shipments"])
-        what = "estimated and received" if meta[(account, account_id, vendor)]["estimated"] else "received, not posted"
+        m = meta[(account, account_id, vendor)]
+        what = "estimated and received" if m["estimated"] else "received, not posted"
+        label = "Goods accrual" if m["goods"] else "Freight accrual"
         rows.append({"account": account, "account_id": account_id, "vendor": vendor, "amount": amount,
-                     "description": f"Freight accrual ({what}): {', '.join(ships[:12])}"
+                     "description": f"{label} ({what}): {', '.join(ships[:12])}"
                                     + (f" and {len(ships) - 12} more" if len(ships) > 12 else "")})
     return rows, sum((r["amount"] for r in rows), Decimal("0.00"))
 

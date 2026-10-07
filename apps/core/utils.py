@@ -15,12 +15,36 @@ def audit(organization: Organization | None, action: str, obj: Any, actor=None, 
         organization=organization,
         actor=actor if getattr(actor, "is_authenticated", False) else None,
         action=action,
-        object_type=type(obj).__name__,
+        object_type=obj.__class__.__name__,   # not type(obj): a lazy request.user/org would log "SimpleLazyObject"
         object_id=str(getattr(obj, "pk", obj)),
         data=_jsonable(data),
         ip=client_ip_var.get(),
         request_id=request_id_var.get()[:40],
     )
+
+
+def clamp_money(value, max_digits: int = 14, decimal_places: int = 2):
+    """A decimal column value that is always safe to store and read back.
+
+    SQLite keeps a number that is too big for a DecimalField as a float, and reading it later raises
+    decimal.InvalidOperation on every page that touches the column. So an amount computed from a bad value
+    (a typo, a misread scan) is rounded to the column's precision and capped at its largest value; NaN and
+    infinity become None."""
+    from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+
+    if value is None:
+        return None
+    try:
+        number = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not number.is_finite():
+        return None
+    step = Decimal(1).scaleb(-decimal_places)
+    biggest = Decimal(10) ** (max_digits - decimal_places) - step
+    if abs(number) > biggest:   # compared before rounding: quantizing a huge number would itself raise
+        return biggest if number > 0 else -biggest
+    return number.quantize(step, rounding=ROUND_HALF_UP)
 
 
 def _jsonable(value):

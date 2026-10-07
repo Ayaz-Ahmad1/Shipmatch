@@ -935,3 +935,144 @@ def test_oversized_statement_upload_is_refused(client, org, approver, settings):
     r = client.post(reverse("close:statement_upload"), {"file": _named(b"Invoice No.,Amount\nA-1,5.00\n", "s.csv")},
                     follow=True)
     assert "larger than 0 MB" in r.content.decode() and not VendorStatement.objects.exists()
+
+
+# --------------------------------------------------------------------------- QA-032 / QA-033 / QA-009 / QA-034
+# A lock is permanent, so the period must be named exactly and must be over.
+
+
+@pytest.mark.parametrize("posted", ["", "   ", "not-a-date", "2026-13-45", "2026-9-30x"])
+def test_lock_needs_an_exact_period_and_never_falls_back_to_the_last_month_end(client, org, approver, posted):
+    login(client, approver)
+    r = client.post(reverse("close:lock"), {"period": posted, "expected_version": "0", "note": ""}, follow=True)
+    assert "Choose which period to lock" in r.content.decode()
+    assert not AccrualSnapshot.objects.filter(organization=org).exists()
+
+
+def test_lock_without_a_period_field_at_all_locks_nothing(client, org, approver):
+    login(client, approver)
+    client.post(reverse("close:lock"), {"expected_version": "0"})
+    assert not AccrualSnapshot.objects.filter(organization=org).exists()
+
+
+def test_a_period_cannot_be_locked_on_its_own_last_day(client, org, approver):
+    login(client, approver)
+    today = timezone.localdate()
+    r = client.post(reverse("close:lock"), {"period": today.isoformat(), "expected_version": "0"}, follow=True)
+    assert "hasn't ended yet" in r.content.decode()
+    assert not AccrualSnapshot.objects.filter(organization=org).exists()
+    yesterday = today - timedelta(days=1)
+    client.post(reverse("close:lock"), {"period": yesterday.isoformat(), "expected_version": "0"})
+    assert AccrualSnapshot.objects.filter(organization=org, period_end=yesterday).exists()
+
+
+def test_the_lock_button_is_only_offered_for_a_period_that_has_ended(client, org, approver):
+    login(client, approver)
+    future = (timezone.localdate() + timedelta(days=40)).isoformat()
+    page = client.get(reverse("close:accruals"), {"period": future, "live": "1"}).content.decode()
+    assert "Lock the period ending" not in page and "hasn't ended yet, so it can't be locked" in page
+    page = client.get(reverse("close:accruals"), {"period": "2026-09-30"}).content.decode()
+    assert "Lock the period ending" in page
+
+
+def test_a_second_version_is_only_offered_when_something_changed(client, org, approver):
+    settings_for(org, expect_destination="never")
+    s = shipment(org, ship="2026-09-12")
+    invoice(org, s, day="2026-09-20")
+    login(client, approver)
+    client.post(reverse("close:lock"), {"period": "2026-09-30", "expected_version": "0", "note": ""})
+
+    page = client.get(reverse("close:accruals"), {"period": "2026-09-30", "live": "1"}).content.decode()
+    assert "Nothing has changed since it was locked" in page and "Lock the period ending" not in page
+
+    invoice(org, s, day="2026-10-02", lines=(("Customs Clearance", "195.00"),))
+    page = client.get(reverse("close:accruals"), {"period": "2026-09-30", "live": "1"}).content.decode()
+    assert "Lock the period ending" in page
+
+
+def test_a_garbled_period_in_the_address_says_so(client, org, approver):
+    login(client, approver)
+    r = client.get(reverse("close:accruals"), {"period": "abc"}, follow=True)
+    assert "isn&#x27;t a date" in r.content.decode() or "isn't a date" in r.content.decode()
+
+
+# --------------------------------------------------------------------------- QA-035 and amounts that can't be stored
+# Typed money must fit the database column, and a currency must be exactly three letters (not cut to three).
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("1,250.5", Decimal("1250.50")), (" 640 ", Decimal("640.00")), ("0.005", Decimal("0.01")),
+    ("99999999999999.99", Decimal("99999999999999.99")),
+])
+def test_parse_amount_accepts_what_fits(raw, expected):
+    from apps.core.money import parse_amount
+
+    assert parse_amount(raw) == expected
+
+
+@pytest.mark.parametrize("raw, kind", [
+    ("abc", "number"), ("", "number"), ("1e9", "number"), ("NaN", "number"), ("Infinity", "number"),
+    ("-5", "number"), ("12abc", "number"),
+    ("100000000000000", "range"), ("99999999999999999999", "range"),
+])
+def test_parse_amount_refuses_what_cannot_be_stored(raw, kind):
+    from apps.core.money import AmountError, parse_amount
+
+    with pytest.raises(AmountError) as e:
+        parse_amount(raw)
+    assert e.value.kind == kind
+
+
+def test_a_currency_longer_than_three_letters_is_refused_not_cut(client, org, approver):
+    login(client, approver)
+    r = client.post(reverse("close:payment_add"), {"vendor": HL, "paid_on": "2026-09-01", "amount": "10",
+                                                   "currency": "DOLLARS"}, follow=True)
+    assert "three-letter code" in r.content.decode()
+    assert not VendorPayment.objects.exists()
+
+
+@pytest.mark.parametrize("amount", ["99999999999999999999", "1e30", "100000000000000"])
+def test_an_overflowing_payment_is_refused_and_pages_still_load(client, org, approver, amount):
+    login(client, approver)
+    r = client.post(reverse("close:payment_add"), {"vendor": HL, "paid_on": "2026-09-01", "amount": amount,
+                                                   "currency": "USD"}, follow=True)
+    assert "too large" in r.content.decode() or "as a number" in r.content.decode()
+    assert not VendorPayment.objects.exists()
+    assert client.get(reverse("close:statements")).status_code == 200
+
+
+@pytest.mark.parametrize("amount", ["99999999999999999999", "100000000000000"])
+def test_an_overflowing_adjustment_is_refused(client, org, approver, amount):
+    s = shipment(org, ship="2026-09-12")
+    login(client, approver)
+    r = client.post(reverse("close:adjust"), {"shipment": s.pk, "group": "destination", "action": "amount",
+                                              "amount": amount, "note": "typo", "period": "2026-09-30"}, follow=True)
+    assert "too large" in r.content.decode()
+    assert not AccrualAdjustment.objects.exists()
+    assert client.get(reverse("close:accruals"), {"period": "2026-09-30", "live": "1"}).status_code == 200
+
+
+def test_an_overflowing_statement_balance_is_refused(client, org, approver):
+    st = _statement(org, [("invoice", "HA-1", date(2026, 8, 20), "", "100.00")])
+    login(client, approver)
+    r = client.post(reverse("close:statement_edit", args=[st.pk]), {"vendor": HL, "statement_date": "2026-09-30",
+                                                                     "currency": "USD",
+                                                                     "closing_balance": "99999999999999999999"},
+                    follow=True)
+    assert "too large" in r.content.decode()
+    st.refresh_from_db()
+    assert st.closing_balance is None or abs(st.closing_balance) < Decimal("1e14")
+    assert client.get(reverse("close:statement", args=[st.pk])).status_code == 200
+
+
+def test_an_overflowing_approval_limit_is_refused(client, admin_user, org, user):
+    from apps.core.models import Membership
+
+    client.force_login(admin_user)
+    m = Membership.objects.get(user=user, organization=org)
+    r = client.post(reverse("core:update_member", args=[m.pk]), {"role": "approver",
+                                                                  "approval_limit": "99999999999999999999"},
+                    follow=True)
+    assert "too large" in r.content.decode()
+    m.refresh_from_db()
+    assert m.role == "reviewer" and m.approval_limit is None

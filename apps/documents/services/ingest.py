@@ -13,7 +13,7 @@ import logging
 import re
 
 from django.core.files.base import ContentFile
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.core.models import Organization
 from apps.core.utils import audit
@@ -25,6 +25,33 @@ MAX_BYTES = 25 * 1024 * 1024  # default; the real limits are INTAKE_MAX_FILE_MB 
 
 class RejectedFile(ValueError):
     pass
+
+
+class DuplicateFile(Exception):
+    """The same bytes were stored by someone else a moment ago (two uploads of one file at the same time)."""
+
+    def __init__(self, existing: Document):
+        super().__init__(f"duplicate of document {existing.pk}")
+        self.existing = existing
+
+
+def store_unique(doc: Document) -> None:
+    """Save a new document, or raise DuplicateFile when another request stored the same file first.
+
+    The check "have we seen these bytes?" and the insert are separate steps, so two requests can both pass
+    the check; the database's unique (organization, sha256) then refuses the second. That refusal is the normal
+    outcome of a double-click, not an error: remove the copy just written to storage and use the first."""
+    try:
+        with transaction.atomic():
+            doc.save()
+    except IntegrityError:
+        existing = Document.objects.filter(organization_id=doc.organization_id, sha256=doc.sha256).first()
+        if existing is None:
+            raise   # some other constraint: a real problem
+        for stored in (doc.file, doc.original_file):
+            if stored:
+                stored.delete(save=False)
+        raise DuplicateFile(existing) from None
 
 
 def safe_filename(name: str) -> str:
@@ -52,11 +79,23 @@ def ingest_bytes(org: Organization, filename: str, content: bytes, source: str =
     filename = display_name(filename)
     kind = formats.detect(filename, content)
     formats.check_size(filename, content, kind)
+    if kind.kind == formats.PDF:   # after the size check: a huge junk file is refused without being parsed
+        formats.check_pdf(filename, content)
     sha = hashlib.sha256(content).hexdigest()
     existing = Document.objects.filter(organization=org, sha256=sha).first()
     if existing:
         audit(org, "document.duplicate_file", existing, actor=actor, filename=filename)
         return existing, False
+    try:
+        return _store(org, filename, content, kind, sha, source, email, actor, process, parent)
+    except DuplicateFile as dup:   # lost a race with an identical upload
+        audit(org, "document.duplicate_file", dup.existing, actor=actor, filename=filename, race=True)
+        return dup.existing, False
+
+
+def _store(org, filename, content, kind, sha, source, email, actor, process, parent):
+    from apps.intake.services import formats
+
     if parent is None:  # plan limits (apps.billing); files inside a ZIP or a split PDF are part of their parent
         from apps.billing.usage import check_intake
 
@@ -73,7 +112,7 @@ def ingest_bytes(org: Organization, filename: str, content: bytes, source: str =
     doc.file.save(safe_filename(doc.pdf_filename), ContentFile(pdf), save=False)
     if kind.kind != formats.PDF:
         doc.original_file.save(safe_filename(filename), ContentFile(content), save=False)
-    doc.save()
+    store_unique(doc)
     extra = {"format": kind.label} if kind.kind != formats.PDF else {}
     if parent is not None:
         extra["parent"] = parent.pk

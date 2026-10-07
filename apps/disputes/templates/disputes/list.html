@@ -102,9 +102,9 @@
   {% else %}
   <div class="empty">
     {% icon "send" %}
-    {% if q or vendor or age %}<h3>No disputes match these filters</h3><p class="muted">Clear the filters or look in another tab.</p>
-    {% elif tab == "waiting" %}<h3>No vendor owes you an answer</h3><p class="muted">When a check finds money at risk on an invoice, open the shipment and choose “Dispute with vendor”.</p>
-    {% else %}<h3>Nothing here yet</h3>{% endif %}
+    {% if q or vendor or age %}<h2>No disputes match these filters</h2><p class="muted">Clear the filters or look in another tab.</p>
+    {% elif tab == "waiting" %}<h2>No vendor owes you an answer</h2><p class="muted">When a check finds money at risk on an invoice, open the shipment and choose “Dispute with vendor”.</p>
+    {% else %}<h2>Nothing here yet</h2>{% endif %}
   </div>
   {% endif %}
 </section>

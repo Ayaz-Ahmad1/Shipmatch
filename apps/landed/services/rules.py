@@ -68,8 +68,9 @@ def check_shared(shipment: Shipment, docs):
                             {"key": f"{doc.pk}:{allocation.split_hash(total, currency, rows)}", "invoice": doc.pk})
 
 
-def approval_blockers(shipment: Shipment, user) -> list[str]:
-    reasons = []
+def _active_splits(shipment: Shipment):
+    """(shared invoice, its document, the split rows, whether it is posted with this shipment) for every shared
+    invoice this shipment carries a share of."""
     for si in allocation.for_shipment(shipment):
         if si.status != SharedInvoice.Status.ACTIVE:
             continue
@@ -80,6 +81,19 @@ def approval_blockers(shipment: Shipment, user) -> list[str]:
         is_primary = hasattr(doc, "match") and doc.match.shipment_id == shipment.pk
         if not is_primary and not any(r.shipment_id == shipment.pk for r in rows):
             continue
+        yield si, doc, rows, is_primary
+
+
+def unconfirmed_splits(shipment: Shipment) -> list[str]:
+    """Numbers of the shared invoices whose split still has to be confirmed before this shipment can be approved.
+    Until then the other shipments' containers on the invoice show up as errors; confirming clears them."""
+    return [invoice_number(doc) for si, doc, rows, _ in _active_splits(shipment)
+            if allocation.adds_up(doc, rows) and not allocation.is_confirmed(si, rows)]
+
+
+def approval_blockers(shipment: Shipment, user) -> list[str]:
+    reasons = []
+    for si, doc, rows, is_primary in _active_splits(shipment):
         number = invoice_number(doc)
         if allocation.adds_up(doc, rows) and not allocation.is_confirmed(si, rows):
             reasons.append(f"Confirm the split of shared invoice {number} first (Shared invoices, on this page).")

@@ -684,3 +684,28 @@ def test_firm_admins_create_client_organizations_when_enabled(client, org, user,
     assert Organization.objects.filter(slug="harbor-foods-2").exists()
     client.force_login(user)  # a reviewer is not a firm admin
     assert client.post(reverse("workflow:create_org"), {"name": "Sneaky"}).status_code == 403
+
+
+# --------------------------------------------------------------------------- QA-056: my work does only the work it shows
+
+
+def test_my_work_works_out_totals_only_for_the_rows_on_the_page(client, org, approver, monkeypatch):
+    from apps.shipments.models import Shipment
+    from apps.workflow.services import portfolio
+    from apps.workflow.views import PER_PAGE
+
+    for i in range(PER_PAGE + 15):
+        Shipment.objects.create(organization=org, bl_number=f"MW{i}", status=Shipment.Status.READY)
+    calls = []
+    real = portfolio.shipment_totals
+    monkeypatch.setattr(portfolio, "shipment_totals", lambda s: calls.append(s.pk) or real(s))
+    client.force_login(approver)
+
+    first = client.get(reverse("workflow:my_work"))
+    assert first.status_code == 200 and first.context["total"] == PER_PAGE + 15
+    assert len(calls) == PER_PAGE   # not PER_PAGE + 15
+
+    calls.clear()
+    second = client.get(reverse("workflow:my_work"), {"page": 2})
+    assert second.status_code == 200 and len(calls) == 15
+    assert all(row.totals is not None for row in second.context["page"].object_list)

@@ -48,7 +48,11 @@
     document.querySelectorAll(".doc-card.active").forEach(function (c) { c.classList.remove("active"); });
     var card = btn.closest(".doc-card");
     if (card) { card.classList.add("active"); }
-    if (window.matchMedia("(max-width: 1180px)").matches) { viewer.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    if (window.matchMedia("(max-width: 1180px)").matches) {
+      // The iframe is detached while the PDF.js viewer is on, so scroll to the whole viewer panel instead.
+      var panel = viewer.isConnected ? viewer : document.querySelector(".viewer");
+      if (panel) { panel.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    }
   }
   document.addEventListener("click", function (e) {
     var btn = e.target.closest ? e.target.closest("[data-pdf-url]") : null;

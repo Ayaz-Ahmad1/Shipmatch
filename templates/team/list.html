@@ -17,7 +17,7 @@
           <select class="w-full" id="inv-role" name="role">{% for key, name in roles %}<option value="{{ key }}"{% if key == "reviewer" %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
         <div><label class="lbl" for="inv-limit">Approval limit</label><input class="w-full" id="inv-limit" type="text" name="approval_limit" inputmode="decimal" placeholder="No limit"></div>
       </div>
-      <p class="hint">They get an email with a link to set their password. The link works for 3 days.</p>
+      <p class="hint">They get an email with a link: to set a password if they are new, or to accept the invitation if they already use ShipMatch. The link works for 3 days (7 for an invitation).</p>
       <div><button class="btn btn-primary" type="submit">Send invite</button></div>
     </form>
   </details>
@@ -26,7 +26,7 @@
 {% if invite_link %}
 <section class="card" style="margin-bottom:16px">
   <div class="card-body">
-    <p><strong>Password link for {{ invite_link.email }}.</strong> If email isn't set up on this server, copy the link and send it yourself. It works once, for 3 days.</p>
+    <p><strong>Link for {{ invite_link.email }}.</strong> If email isn't set up on this server, copy the link and send it yourself. It only works for that person.</p>
     <div class="secret"><code id="invite-link">{{ invite_link.link }}</code><button class="btn btn-sm" type="button" data-copy="#invite-link">Copy link</button></div>
   </div>
 </section>
@@ -54,14 +54,15 @@
           </form>
         </td>
         <td>{% if m.user.profile.mfa_enabled %}<span class="badge ok">On</span>{% else %}<span class="badge neutral">Off</span>{% endif %}</td>
-        <td class="nowrap muted">{% if m.user.last_login %}{{ m.user.last_login|date:"j M Y, H:i" }}{% else %}Never{% endif %}</td>
+        <td class="nowrap muted">{% if m.shared %}<span title="This person also works in other organizations">n/a</span>{% elif m.user.last_login %}{{ m.user.last_login|date:"j M Y, H:i" }}{% else %}Never{% endif %}</td>
         <td class="nowrap">
           {% if m.user_id != user.pk %}
           <details class="reveal popover" data-menu>
             <summary class="btn btn-sm btn-quiet">More</summary>
             <div class="pop-form">
+              {% if m.shared %}<p class="hint" style="margin:0 0 8px">Also belongs to other organizations. Only they can reset their password or two-factor.</p>{% else %}
               <form method="post" action="{% url 'core:password_link' m.pk %}">{% csrf_token %}<button class="btn btn-sm w-full" type="submit">{% icon "link" %} Send password link</button></form>
-              {% if m.user.profile.mfa_enabled %}<form method="post" action="{% url 'core:reset_member_mfa' m.pk %}">{% csrf_token %}<button class="btn btn-sm w-full" type="submit">{% icon "refresh" %} Reset two-factor</button></form>{% endif %}
+              {% if m.user.profile.mfa_enabled %}<form method="post" action="{% url 'core:reset_member_mfa' m.pk %}">{% csrf_token %}<button class="btn btn-sm w-full" type="submit">{% icon "refresh" %} Reset two-factor</button></form>{% endif %}{% endif %}
               <form method="post" action="{% url 'core:remove_member' m.pk %}">{% csrf_token %}<button class="btn btn-sm btn-danger w-full" type="submit">{% icon "x" %} Remove from {{ org.name|truncatechars:24 }}</button></form>
             </div>
           </details>

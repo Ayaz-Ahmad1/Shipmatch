@@ -16,7 +16,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
+from apps.core.paging import Paginator
 from django.db.models import Count, Q
 from django.forms import inlineformset_factory
 from django.http import HttpResponse
@@ -34,7 +34,16 @@ from apps.shipments.labels import describe_action
 from apps.shipments.models import ValidationIssue
 
 from . import charges, csvio, lanes
-from .forms import EQUIPMENT_FILTER, AccessorialForm, AliasForm, ChargeForm, ChargeFormSet, QuoteForm, RateSettingsForm
+from .forms import (
+    EQUIPMENT_FILTER,
+    AccessorialForm,
+    AliasForm,
+    ChargeForm,
+    ChargeFormSet,
+    QuoteForm,
+    RateSettingsForm,
+    UniqueChargesFormSet,
+)
 from .models import ApprovedAccessorial, ChargeAlias, Quote, QuoteCharge, RateSettings
 from .services import changes, recheck, snapshot
 
@@ -148,8 +157,8 @@ def quote_list(request):
 
 
 def _formset_class(extra: int):
-    return inlineformset_factory(Quote, QuoteCharge, form=ChargeForm, extra=extra, can_delete=True, min_num=1,
-                                 validate_min=True, max_num=60)
+    return inlineformset_factory(Quote, QuoteCharge, form=ChargeForm, formset=UniqueChargesFormSet, extra=extra,
+                                 can_delete=True, min_num=1, validate_min=True, max_num=60)
 
 
 def _render_form(request, org, form, formset, quote=None, copy_from=None):
@@ -168,7 +177,7 @@ def quote_create(request):
         copy_from = get_object_or_404(Quote.objects.filter(organization=org).prefetch_related("charges"),
                                       pk=request.GET["copy"] if request.GET["copy"].isdigit() else 0)
     if request.method == "POST":
-        form = QuoteForm(request.POST)
+        form = QuoteForm(request.POST, organization=org)
         formset = ChargeFormSet(request.POST, instance=Quote(organization=org), prefix="charges")
         if form.is_valid() and formset.is_valid():
             quote = form.save(commit=False)
@@ -206,7 +215,7 @@ def quote_edit(request, pk):
     quote = _quote_for(request, pk)
     if request.method == "POST":
         before, old_key = snapshot(quote), quote.vendor_key
-        form = QuoteForm(request.POST, instance=quote)
+        form = QuoteForm(request.POST, instance=quote, organization=org)
         formset = ChargeFormSet(request.POST, instance=quote, prefix="charges")
         if form.is_valid() and formset.is_valid():
             quote = form.save(commit=False)
@@ -381,9 +390,10 @@ def extras(request):
 
 def _extra_form(request, org, instance=None):
     if request.method == "POST":
-        form = AccessorialForm(request.POST, instance=instance)
+        # Snapshot first: validating a ModelForm writes the new values onto the instance.
+        before = ({f: str(getattr(instance, f)) for f in AccessorialForm.base_fields} if instance else None)
+        form = AccessorialForm(request.POST, instance=instance, organization=org)
         if form.is_valid():
-            before = {f: str(getattr(instance, f)) for f in form.fields} if instance else None
             old_key = instance.vendor_key if instance else None
             extra = form.save(commit=False)
             extra.organization = org
@@ -391,6 +401,7 @@ def _extra_form(request, org, instance=None):
             if instance is None:
                 extra.created_by = request.user
             extra.save()
+            extra.refresh_from_db()   # so numbers read back the way "before" did (175 vs 175.00)
             after = {f: str(getattr(extra, f)) for f in form.fields}
             if before is None:
                 audit(org, "accessorial.created", extra, actor=request.user, vendor=extra.vendor_name,

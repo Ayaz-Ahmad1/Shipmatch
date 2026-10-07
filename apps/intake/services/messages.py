@@ -41,5 +41,5 @@ def photo_hint(docs) -> str:
         return ""
     names = ", ".join(d.original_filename for d in photos[:3])
     return (f"{names} {'is a photo' if len(photos) == 1 else 'are photos'}. Text recognition (OCR) is off, so type the "
-            "B/L, container or PO number on the document's page to match it. An admin can turn on reading of photos "
-            "and scans with EXTRACTION_PROVIDER=anthropic or OCR_PROVIDER=textract.")
+            "B/L, container or PO number on the document's page to match it. Ask your administrator to turn on "
+            "reading of photos and scans.")

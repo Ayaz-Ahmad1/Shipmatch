@@ -19,6 +19,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_POST
 
 from apps.core.context import client_ip_var
+from apps.core import timezones
 from apps.core.models import Organization
 from apps.core.utils import audit
 
@@ -120,7 +121,7 @@ def security_view(request):
     pending_qr = None
     if profile.mfa_secret and not profile.mfa_enabled:
         pending_qr = mfa.qr_data_uri(request.user, profile.mfa_secret)
-    zones = sorted(z for z in zoneinfo.available_timezones() if "/" in z and not z.startswith(("Etc/", "SystemV/")))
+    zones = timezones.choices(profile.timezone)
     return render(request, "account/security.html", {
         "profile": profile, "pending_qr": pending_qr, "pending_secret": profile.mfa_secret if pending_qr else "",
         "required_by": _org_requires_mfa(request.user), "zones": zones,
@@ -190,6 +191,9 @@ class PasswordChangeView(auth_views.PasswordChangeView):
     success_url = reverse_lazy("accounts:security")
 
     def form_valid(self, form):
+        if form.user.check_password(form.cleaned_data["new_password1"]):   # checked before the password is saved
+            form.add_error("new_password1", "That is your current password. Choose a different one.")
+            return self.form_invalid(form)
         response = super().form_valid(form)
         update_session_auth_hash(self.request, form.user)
         audit(None, "auth.password_changed", self.request.user, actor=self.request.user)

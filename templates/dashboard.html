@@ -102,7 +102,7 @@
               {% if s.n_errors %}<span class="tag error">{{ s.n_errors }} error{{ s.n_errors|pluralize }}</span>{% endif %}
               {% if s.n_warnings %}<span class="tag warning">{{ s.n_warnings }} warning{{ s.n_warnings|pluralize }}</span>{% endif %}
             </div></td>
-            <td class="nowrap muted">{{ s.created_at|timesince }}</td>
+            <td class="muted">{{ s.created_at|timesince }}</td>
           </tr>
         {% endfor %}
         </tbody>

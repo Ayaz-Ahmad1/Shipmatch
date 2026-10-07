@@ -128,13 +128,17 @@ def shipment_export(request, pk, fmt):
 # ---------------------------------------------------------------- report
 
 
-def _report_args(request):
+def _report_args(request, notify: bool = False):
     key = request.GET.get("period", "12m")
     key = key if key in dict(report_service.PERIODS) else "12m"
     start = parse_date(request.GET.get("from")) if request.GET.get("from") else None
     end = parse_date(request.GET.get("to")) if request.GET.get("to") else None
     if key == "custom" and not (start and end):
+        if notify and (request.GET.get("from") or request.GET.get("to")):
+            messages.warning(request, "Those dates could not be read, so the last 12 months are shown.")
         key = "12m"
+    elif key == "custom" and start > end and notify:
+        messages.info(request, "The start date was after the end date, so the two were swapped.")
     start, end = report_service.period_range(key, report_service.today(), start, end)
     return key, start, end, request.GET.get("open") == "1", request.GET.get("q", "")[:100]
 
@@ -143,7 +147,7 @@ def _report_args(request):
 def report(request):
     org = current_org(request)
     require(request.user, org, "view")
-    key, start, end, include_open, q = _report_args(request)
+    key, start, end, include_open, q = _report_args(request, notify=True)
     rep = report_service.build(org, start, end, include_open=include_open, q=q)
     return render(request, "landed/report.html", {
         "r": rep, "period": key, "periods": report_service.PERIODS, "include_open": include_open, "q": q,
@@ -261,7 +265,10 @@ def split_confirm(request, pk):
     except allocation.SplitError as e:
         messages.error(request, f"Not confirmed. {e}")
         return redirect(_back(request, doc))
-    messages.success(request, f"Split of invoice {allocation.invoice_number(doc)} confirmed.")
+    refs = sorted({r.shipment.reference for r in allocation.allocations(doc)})
+    messages.success(request, f"Split of invoice {allocation.invoice_number(doc)} confirmed."
+                              + (f" This closed the split warning on {', '.join(refs)} under your name; "
+                                 "with maker-checker on, someone else must approve those shipments." if len(refs) > 1 else ""))
     return redirect(_back(request, doc))
 
 

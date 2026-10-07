@@ -158,11 +158,23 @@ def _test(request, mailbox: Mailbox) -> bool:
     return ok
 
 
+def _host_is_usable(form: ImapForm) -> bool:
+    """Refuse a server ShipMatch would never connect to (private network, name that doesn't exist) before
+    anything is saved, so a wrong host leaves no half-made mailbox holding the password. A wrong password or
+    username is different: that mailbox is kept so the person can correct it without retyping everything."""
+    try:
+        imap.check_host(form.cleaned_data["host"])
+    except imap.ImapError as e:
+        form.add_error("host", str(e))
+        return False
+    return True
+
+
 @login_required
 def imap_new(request):
     org = _manage_org(request)
     form = ImapForm(request.POST or None, require_password=True)
-    if request.method == "POST" and form.is_valid():
+    if request.method == "POST" and form.is_valid() and _host_is_usable(form):
         mailbox = Mailbox(organization=org, kind=Mailbox.Kind.IMAP, created_by=request.user)
         _apply_imap(mailbox, form.cleaned_data)
         mailbox.folder_name = mailbox.folder
@@ -198,7 +210,9 @@ def edit(request, pk):
     mailbox = _mailbox_for(request, pk)
     org = mailbox.organization
     form = _form_for(mailbox, request.POST or None)
-    if request.method == "POST" and form.is_valid():
+    host_changed = mailbox.kind == Mailbox.Kind.IMAP and form.is_bound and form.is_valid() \
+        and form.cleaned_data["host"] != mailbox.host
+    if request.method == "POST" and form.is_valid() and (not host_changed or _host_is_usable(form)):
         data = form.cleaned_data
         changed, retest = [], False
         if mailbox.kind == Mailbox.Kind.IMAP:

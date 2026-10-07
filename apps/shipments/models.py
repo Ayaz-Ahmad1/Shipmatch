@@ -96,6 +96,12 @@ class ValidationIssue(models.Model):
     class Meta:
         ordering = ["resolved", "-severity", "id"]
 
+    def save(self, *args, **kwargs):
+        from apps.core.utils import clamp_money
+
+        self.amount_at_risk = clamp_money(self.amount_at_risk)   # a bad amount must never break the pages that sum this column
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"[{self.severity}] {self.code}: {self.message}"
 
