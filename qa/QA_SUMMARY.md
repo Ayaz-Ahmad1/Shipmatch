@@ -1,7 +1,7 @@
-# ShipMatch QA — prioritised summary of sessions 01–07
+# ShipMatch QA — prioritised summary of sessions 01–08
 
 Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issues listed only (nothing was fixed), against the local demo data plus the empty **Northwind Traders (test)** org for destructive tests. Detail, repro steps and evidence are in the per-session logs:
-[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md)
+[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md) · [08 webhooks, accounting, DEBUG off](QA_SESSION_08.md)
 
 **Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
 
@@ -13,10 +13,15 @@ Fixes are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe
 
 - **Fixed:** QA-001, 002, 003, 004, 005, 006*, 007*, 008, 009, 010, 011, 012, 013, 014, 015, 017, 018, 024, 025, 026, 028, 029, 030, 032, 033, 034, 035, 036, 038, 039, 041, 042, 043, 044, 046, 048, 049, 051, 053, 054, 055, 058, 060, 061, 062, 064, 065, 066, 067, 068, 069, 071, 072, 074.
   (QA-006 and QA-007 were checked in the browser at 375 px and 1024 px on SHP-000041 and SHP-000044.)
+- **Session 08:** QA-075 and QA-076 fixed on branch `fix/qa-session-08`; QA-077 fixed too (the API docs page now uses the Swagger UI files bundled with django-ninja, under the normal Content-Security-Policy).
 - **Partly fixed:** QA-056 (totals are paged; about 5 queries per ready shipment remain).
 - **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070.
 - **Left open, performance or deployment:** QA-057 (pdf.js loads eagerly; the evidence highlighting depends on it), QA-063 (static file caching), QA-031 (redirect URI comes from `.env`).
 - **Left open, product decisions:** QA-016, 020, 022, 023, 027, 040, 050, 059, 073.
+
+---
+
+**Session 08 (7 Oct 2026) added three open issues:** QA-075 (Medium: QuickBooks default expense account accepts any value and says "saved"), QA-076 (Low: a long webhook host name was echoed in full in the error), QA-077 (Low, verify: API docs page loads Swagger UI from public CDNs).
 
 ---
 
