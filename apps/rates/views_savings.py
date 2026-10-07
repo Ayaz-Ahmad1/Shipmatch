@@ -10,6 +10,7 @@ import csv
 import io
 from datetime import date, timedelta
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 from django.shortcuts import render
@@ -24,13 +25,17 @@ from . import roi
 from .savings import OUTCOME_LABELS, PERIODS, period_range, summary
 
 
-def _period(request) -> tuple[date, date, str, str]:
+def _period(request, notify: bool = False) -> tuple[date, date, str, str]:
     key = request.GET.get("period", "this_month")
     key = key if key in dict(PERIODS) else "this_month"
     start = parse_date(request.GET.get("from")) if request.GET.get("from") else None
     end = parse_date(request.GET.get("to")) if request.GET.get("to") else None
     if key == "custom" and not (start and end):
+        if notify and (request.GET.get("from") or request.GET.get("to")):
+            messages.warning(request, "Those dates could not be read, so this month is shown.")
         key = "this_month"
+    elif key == "custom" and start > end and notify:
+        messages.info(request, "The start date was after the end date, so the two were swapped.")
     s, e, label = period_range(key, timezone.localdate(), start, end)
     return s, e, label, key
 
@@ -39,7 +44,7 @@ def _period(request) -> tuple[date, date, str, str]:
 def savings_summary(request):
     org = current_org(request)
     require(request.user, org, "view")
-    start, end, label, key = _period(request)
+    start, end, label, key = _period(request, notify=True)
     s = summary(org, start, end)
     months, months_label = s.by_month, label
     if len(months) < 3:  # one or two bars say little: show the six months up to the period's end for context

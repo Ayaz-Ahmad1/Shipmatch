@@ -122,6 +122,25 @@ def _set_items(dispute: Dispute, issues: list[ValidationIssue]) -> None:
         DisputeItem.objects.create(dispute=dispute, **item_snapshot(issue, inv))
 
 
+def _invoice_sender(invoice) -> str:
+    """The address the invoice was emailed from, as a starting point for "To" when no contact is saved yet."""
+    import re
+
+    email = getattr(invoice, "email", None)
+    m = re.search(r"[\w.+-]+@[\w-]+(\.[\w-]+)+", getattr(email, "sender", "") or "")
+    return m.group(0) if m else ""
+
+
+def _invoice_total(dispute: Dispute) -> Decimal | None:
+    """The disputed invoice's printed total, when it can be read."""
+    from apps.documents.services.locate import to_decimal
+
+    if dispute.invoice is None:
+        return None
+    total = to_decimal(dispute.invoice.field("total_amount"))
+    return total if total is not None and total > 0 else None
+
+
 def default_amount(dispute: Dispute) -> Decimal:
     """Sum of the linked issues' money at risk in the dispute's currency."""
     total = Decimal("0.00")
@@ -156,7 +175,8 @@ def create_draft(shipment: Shipment, invoice: Document, issue_ids, user, use_ai:
     dispute = Dispute.objects.create(
         organization=org, shipment=shipment, shipment_reference=shipment.reference, invoice=invoice,
         invoice_number=str(data.get("invoice_number") or "")[:60], vendor_name=name[:200], vendor_key=key[:200],
-        contact_name=contact.name if contact else "", vendor_email=contact.email if contact else "",
+        contact_name=contact.name if contact else "",
+        vendor_email=contact.email if contact and contact.email else _invoice_sender(invoice),
         currency=(data.get("currency") or org.home_currency or "").upper()[:3], created_by=user, updated_by=user)
     _set_items(dispute, issues)
     dispute.amount_disputed = default_amount(dispute)
@@ -241,6 +261,14 @@ def update_draft(dispute: Dispute, user, *, vendor_email: str, contact_name: str
         _set_items(dispute, _disputable_issues(dispute.shipment, dispute.invoice, new_ids))
 
     entered = parse_amount(amount, "Amount disputed") if str(amount).strip() else None
+    if entered is not None:
+        invoice_total = _invoice_total(dispute)
+        if invoice_total is not None and entered > invoice_total:
+            raise DisputeError(f"The amount disputed ({money(entered, dispute.currency)}) is more than the whole "
+                               f"invoice ({money(invoice_total, dispute.currency)}).")
+        if entered == 0 and default_amount(dispute) > 0:
+            raise DisputeError(f"The issues put {money(default_amount(dispute), dispute.currency)} at risk, so the "
+                               "amount disputed can't be 0. Leave the amount empty to use that figure.")
     if entered is None or (issues_changed and entered == old_amount):
         dispute.amount_disputed = default_amount(dispute)  # follow the issues unless the person typed an amount
     else:
@@ -330,13 +358,21 @@ def set_follow_up(dispute: Dispute, user, raw: str) -> None:
 
 @transaction.atomic
 def record_credit(dispute: Dispute, user, amount: str, credit_note_id: str = "", settles: bool = False,
-                  note: str = "") -> None:
+                  note: str = "", confirm_over: bool = False) -> None:
     """The vendor issued a credit note or a corrected invoice. `amount` is the total recovered so far."""
     if dispute.status not in Dispute.WAITING | {Dispute.Status.CREDIT_RECEIVED}:
         raise DisputeError("A credit can be recorded only on a dispute that was sent and is still open.")
     value = parse_amount(amount, "Amount recovered")
     if value <= 0:
         raise DisputeError("Enter the amount the vendor credited. To end the dispute with nothing back, close it instead.")
+    invoice_total = _invoice_total(dispute)
+    if invoice_total is not None and value > invoice_total:
+        raise DisputeError(f"A credit of {money(value, dispute.currency)} is more than the whole invoice "
+                           f"({money(invoice_total, dispute.currency)}). Check the amount.")
+    if value > dispute.amount_disputed > 0 and not confirm_over:
+        raise DisputeError(f"The credit ({money(value, dispute.currency)}) is more than the amount disputed "
+                           f"({money(dispute.amount_disputed, dispute.currency)}). If that is right, tick “The credit is "
+                           "higher than the amount disputed” and save again.")
     credit_doc = None
     if str(credit_note_id or "").strip():
         credit_doc = Document.objects.filter(organization=dispute.organization, pk=str(credit_note_id).strip()

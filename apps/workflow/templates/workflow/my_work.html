@@ -44,7 +44,7 @@
         <td>{{ i.org.name }}</td>
         <td><div class="tags">{% if i.assigned %}<span class="tag alert-tag">Assigned to you</span>{% endif %}{% if i.can_approve %}<span class="tag ok">Ready for your approval</span>{% elif i.blockers %}<span class="tag warning" title="{{ i.blockers|join:' ' }}">You can't approve it</span>{% endif %}</div></td>
         <td>{% include "includes/status.html" with s=i.shipment %}</td>
-        <td class="num nowrap">{% for cur, amount in i.totals.by_currency.items %}{{ amount|money:cur }}{% if not forloop.last %}<br>{% endif %}{% empty %}–{% endfor %}</td>
+        <td class="num nowrap">{% for cur, amount in i.totals.by_currency.items %}<div>{{ amount|money:cur }}</div>{% empty %}–{% endfor %}</td>
         <td class="nowrap muted" title="Since {{ i.waiting_since|date:'j M Y, H:i' }}">{{ i.waiting_since|timesince }}</td>
         <td class="num">{% if i.can_approve %}<a class="btn btn-sm btn-primary" href="{% url 'workflow:quick' i.shipment.pk %}?org={{ i.org.slug }}">Review and approve</a>{% else %}<a class="btn btn-sm" href="{% url 'review:shipment' i.shipment.pk %}?org={{ i.org.slug }}">Open</a>{% endif %}</td>
       </tr>

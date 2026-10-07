@@ -139,7 +139,7 @@ def test_password_protected_and_damaged_archives(org, files):
     assert locked["status"] == "skipped" and "password" in locked["reason"]
     with pytest.raises(RejectedFile, match="damaged"):
         ingest_bytes(org, "broken.zip", b"PK\x03\x04" + b"\x00" * 40)
-    with pytest.raises(RejectedFile, match="no PDF, image or spreadsheet files inside"):
+    with pytest.raises(RejectedFile, match="no PDF, image or spreadsheet files could be added .*a.docx: "):
         ingest_bytes(org, "words.zip", extra.zip_of({"a.docx": b"x", "b.txt": b"y"}))
 
 

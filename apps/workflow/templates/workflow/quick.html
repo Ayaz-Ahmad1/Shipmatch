@@ -27,7 +27,7 @@
   <section class="card wf-total">
     <div class="wf-total-main">
       <div class="k">Payable total</div>
-      <div class="v num">{% for cur, amount in totals.by_currency.items %}{{ amount|money:cur }}{% if not forloop.last %}<br>{% endif %}{% empty %}–{% endfor %}</div>
+      <div class="v num">{% for cur, amount in totals.by_currency.items %}<div>{{ amount|money:cur }}</div>{% empty %}–{% endfor %}</div>
       {% if totals.home is not None and totals.by_currency|length > 1 %}<div class="d">{{ totals.home|money:shipment.organization.home_currency }} in total</div>{% endif %}
       {% if totals.missing_rates %}<div class="d">No exchange rate for {{ totals.missing_rates|join:", " }}</div>{% endif %}
     </div>

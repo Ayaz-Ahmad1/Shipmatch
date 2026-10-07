@@ -38,8 +38,8 @@
   {% include "includes/pager.html" %}
   {% else %}
   <div class="empty">{% icon "bell" %}
-    {% if show == "unread" %}<h3>You're all caught up</h3><p class="muted">Nothing unread. <a href="?show=all">See earlier notifications</a>.</p>
-    {% else %}<h3>No notifications yet</h3><p class="muted">When a teammate mentions you with @ or assigns you a shipment, it shows here.</p>{% endif %}
+    {% if show == "unread" %}<h2>You're all caught up</h2><p class="muted">Nothing unread. <a href="?show=all">See earlier notifications</a>.</p>
+    {% else %}<h2>No notifications yet</h2><p class="muted">When a teammate mentions you with @ or assigns you a shipment, it shows here.</p>{% endif %}
   </div>
   {% endif %}
 </section>

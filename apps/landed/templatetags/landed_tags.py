@@ -102,13 +102,10 @@ def pct(value):
 
 @register.filter
 def unit_money(value):
-    """Per-unit cost: up to 4 decimals when they matter (0.4125, 58.369), at least 2."""
+    """Per-unit cost, always 4 decimals so a column of unit costs lines up (0.4125, 58.3690, 17.9000)."""
     if value in (None, ""):
         return "–"
-    text = f"{Decimal(str(value)):,.4f}"
-    while text.endswith("0") and len(text.split(".")[1]) > 2:
-        text = text[:-1]
-    return text
+    return f"{Decimal(str(value)):,.4f}"
 
 
 @register.filter

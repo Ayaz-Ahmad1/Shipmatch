@@ -965,3 +965,89 @@ def test_seed_rates_needs_an_existing_org():
 
     with pytest.raises(CommandError):
         call_command("seed_rates", "--org", "nope")
+
+
+# --------------------------------------------------------------------------- QA-068: quotes and extras that make no sense
+
+
+def _quote_names(client):
+    return list(Quote.objects.values_list("reference", flat=True))
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("amount, words", [
+    ("0", "above zero"), ("0.00", "above zero"), ("-5", "positive amount"),
+    ("1000000.01", "no single charge"), ("1000000000", "no single charge"),
+])
+def test_a_quote_charge_must_be_a_sensible_amount(client, org, approver, amount, words):
+    client.force_login(approver)
+    r = client.post(reverse("rates:create"), _quote_post(**{"charges-0-amount": amount}), follow=True)
+    assert words in r.content.decode()
+    assert not Quote.objects.filter(organization=org).exists()
+
+
+@pytest.mark.django_db
+def test_the_largest_allowed_charge_is_accepted(client, org, approver):
+    client.force_login(approver)
+    client.post(reverse("rates:create"), _quote_post(**{"charges-0-amount": "1000000.00"}))
+    assert Quote.objects.filter(organization=org).count() == 1
+
+
+@pytest.mark.django_db
+def test_the_same_charge_twice_with_the_same_basis_is_refused(client, org, approver):
+    client.force_login(approver)
+    data = _quote_post(**{"charges-1-code": "ocean_freight", "charges-1-amount": "2500.00"})
+    r = client.post(reverse("rates:create"), data, follow=True)
+    assert "listed twice" in r.content.decode()
+    assert not Quote.objects.filter(organization=org).exists()
+
+
+@pytest.mark.django_db
+def test_the_same_charge_priced_on_a_different_basis_is_allowed(client, org, approver):
+    client.force_login(approver)
+    data = _quote_post(**{"charges-1-code": "ocean_freight", "charges-1-amount": "90.00", "charges-1-basis": "bl"})
+    client.post(reverse("rates:create"), data)
+    assert QuoteCharge.objects.filter(quote__organization=org).count() == 2
+
+
+@pytest.mark.django_db
+def test_an_identical_quote_is_refused_but_a_new_period_is_fine(client, org, approver):
+    client.force_login(approver)
+    assert client.post(reverse("rates:create"), _quote_post()).status_code == 302
+    r = client.post(reverse("rates:create"), _quote_post(), follow=True)
+    assert "already exists" in r.content.decode()
+    assert Quote.objects.filter(organization=org).count() == 1
+
+    assert client.post(reverse("rates:create"), _quote_post(valid_from="2027-01-01", valid_to="2027-12-31")).status_code == 302
+    assert client.post(reverse("rates:create"), _quote_post(reference="OTHER-2")).status_code == 302
+    assert Quote.objects.filter(organization=org).count() == 3
+
+
+@pytest.mark.django_db
+def test_editing_a_quote_does_not_clash_with_itself(client, org, approver):
+    client.force_login(approver)
+    client.post(reverse("rates:create"), _quote_post())
+    quote = Quote.objects.get(organization=org)
+    edit = _quote_post(notes="changed", **{"charges-TOTAL_FORMS": "3", "charges-INITIAL_FORMS": "1",
+                                           "charges-0-id": quote.charges.get().pk, "charges-0-quote": quote.pk,
+                                           "charges-2-code": "", "charges-2-description": "",
+                                           "charges-2-amount": "", "charges-2-basis": "container"})
+    r = client.post(reverse("rates:edit", args=[quote.pk]), edit)
+    assert r.status_code == 302
+    quote.refresh_from_db()
+    assert quote.notes == "changed"
+
+
+@pytest.mark.django_db
+def test_an_extra_cannot_be_added_twice_and_has_a_sane_cap(client, org, approver):
+    client.force_login(approver)
+    base = {"vendor_name": MD, "code": "detention", "unit": "day", "free_units": "4", "max_per_unit": "100",
+            "currency": "USD", "valid_from": "2026-01-01"}
+    assert client.post(reverse("rates:extra_create"), base).status_code == 302
+    r = client.post(reverse("rates:extra_create"), base, follow=True)
+    assert "already exists" in r.content.decode()
+    assert ApprovedAccessorial.objects.filter(organization=org).count() == 1
+    r = client.post(reverse("rates:extra_create"), {**base, "valid_from": "2027-01-01", "max_per_unit": "99999999"},
+                    follow=True)
+    assert "unlikely" in r.content.decode()
+    assert ApprovedAccessorial.objects.filter(organization=org).count() == 1

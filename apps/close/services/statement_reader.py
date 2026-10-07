@@ -379,6 +379,7 @@ def _cell(row: list[str], idx: list[int] | None, which: int = 0) -> str:
 
 def read_sheet_rows(loaded: list[sheets.Sheet]) -> ParsedStatement:
     p = ParsedStatement()
+    skipped: list[str] = []
     for sheet in loaded:
         header, cols, heading_cur = find_columns(sheet.rows)
         if header is None:
@@ -414,6 +415,8 @@ def read_sheet_rows(loaded: list[sheets.Sheet]) -> ParsedStatement:
                     p.lines.append(ParsedLine(OPENING, value, "", date_of(_cell(row, cols.get("date"))),
                                               "Opening balance", balance, " | ".join(cells)[:500]))
                 continue
+            if amount is None and (number or _cell(row, cols.get("date"))):
+                skipped.append(" | ".join(cells)[:70])   # looks like a transaction but no amount could be read
             if amount is None or (amount == 0 and not number):
                 continue
             kind = kind_from(words, number, amount) or (INVOICE if amount >= 0 else CREDIT)
@@ -431,6 +434,11 @@ def read_sheet_rows(loaded: list[sheets.Sheet]) -> ParsedStatement:
                            only=("closing_balance",))
         if p.lines:
             break
+    if skipped and p.lines:
+        shown = "; ".join(skipped[:3]) + ("; …" if len(skipped) > 3 else "")
+        p.notes.append(f"{len(skipped)} row{'s' if len(skipped) != 1 else ''} had a number or date but no amount "
+                       f"that could be read, so {'they were' if len(skipped) != 1 else 'it was'} left out: {shown}. "
+                       "Check them against the file.")
     if not p.vendor_name:
         p.vendor_name = _company_from_rows(loaded[0].rows[:6]) if loaded else ""
     return p

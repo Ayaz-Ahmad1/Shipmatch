@@ -1,9 +1,9 @@
-# ShipMatch QA — prioritised summary of sessions 01–06
+# ShipMatch QA — prioritised summary of sessions 01–07
 
 Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issues listed only (nothing was fixed), against the local demo data plus the empty **Northwind Traders (test)** org for destructive tests. Detail, repro steps and evidence are in the per-session logs:
-[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md)
+[01 platform sweep](QA_SESSION_01.md) · [02 approval loop](QA_SESSION_02.md) · [03 disputes & month-end](QA_SESSION_03.md) · [04 intake & integrations](QA_SESSION_04.md) · [05 accounts & admin](QA_SESSION_05.md) · [06 cross-cutting](QA_SESSION_06.md) · [07 gap closing](QA_SESSION_07.md)
 
-**Totals:** 63 numbered issues (QA-001 … QA-064; QA-047 was never used). 2 Critical/High-security, 4 High/Medium-high, 17 Medium, 31 Low, 9 "verify / decide". Several were re-explained or downgraded later; the table below uses the latest understanding.
+**Totals:** 73 numbered issues (QA-001 … QA-074; QA-047 was never used). 2 Critical/High-security, 5 High/Medium-high, 22 Medium, 36 Low, 8 "verify / decide". Session 07 added QA-065 … QA-074 and widened QA-002, QA-003, QA-010, QA-025. Several were re-explained or downgraded later; the table below uses the latest understanding.
 
 ---
 
@@ -18,8 +18,9 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 | # | Issue | Impact | Effort |
 |---|---|---|---|
-| QA-002 + QA-043 | Python **traceback and server file path shown to users** on unreadable documents; root cause: any file that merely starts with `%PDF` is accepted (web and API). | Information leak, looks broken. | S — friendly message; validate PDF structure at upload. |
-| QA-003 | **False "Container not on the bill of lading" errors** on the primary shipment of a shared invoice (SHP-000041: 6 blocking errors; sibling gets none). | Blocks approval, forces overrides, erodes trust in checks. | M |
+| QA-002 + QA-043 | Python **traceback and server file path shown to users** on unreadable documents (including **password-protected PDFs**, a common real case); root cause: any file that merely starts with `%PDF` is accepted (web and API). | Information leak, looks broken. | S — friendly message; validate PDF structure at upload. |
+| QA-003 | "Container not on the bill of lading" errors on the primary shipment of a shared invoice (SHP-000041: 6 blocking errors). **Session 07: they clear automatically when the split is confirmed**, but nothing on the page says so. | Looks like false positives, invites unnecessary overrides. | S (explain on the page) |
+| **QA-074** | **Parallel identical uploads return HTTP 500** (unhandled unique-constraint race on the file hash). Realistic via double-click or email + upload together. | Server error on a normal action; data stays safe. | S |
 | QA-041 | IMAP form **saves the mailbox (with password) even when the connection test fails**; scheme-prefixed hosts accepted; local hosts rejected inconsistently. | Broken, credential-holding rows; unnecessary DNS lookups. | S |
 | QA-032, QA-033 | Month-end: a period can be **locked on its own last day**, and a **malformed or empty `period` silently locks the latest month-end** (locks are permanent). | Irreversible audit snapshots from a wrong click or request. | S |
 | QA-054, QA-055 | Stale pages show Django's raw CSRF error; after session expiry the login `next` points at a POST-only URL, so the user lands on a **blank 405 page**. | Everyday failure path looks broken. | S |
@@ -32,6 +33,7 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 
 | # | Issue |
 |---|---|
+| QA-065, QA-067, QA-068 | Disputes accept an amount of 0 or above the invoice total; a credit above the dispute is recorded and inflates "Recovered" (USD 9,999 on a USD 525 dispute); quotes accept 0 amounts, duplicate charge codes, 1e9 rates and endless identical quotes/extras. |
 | QA-005 | Activity/audit show raw keys (`issue_date`); vendor learning learns from bad edits. |
 | QA-006 + QA-007 + QA-057 | Shipment page on small screens: sideways scroll (landed-cost radio group, legend row, split table), "Show PDF" gives no feedback because the viewer is ~4,700 px down, and ~1.8 MB of pdf.js loads eagerly. |
 | QA-022 | Payable total includes the **whole** shared invoice (USD 38,935) while the shipment's share is 2,522.50. Decide which one approval limits use. |
@@ -48,6 +50,7 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 - **Copy:** QA-013 + QA-044 (env-var names in user messages), QA-045 (nested ZIP message), QA-015 (duplicate message names the wrong file), QA-028 (mixed-currency totals run together), QA-039 (dispute "To" empty).
 - **Audit trail:** QA-026 (`SimpleLazyObject 3` in Record column), QA-027 (denied actions not logged), QA-034 ("Lock version 2" offered when nothing changed).
 - **Accessibility:** QA-053 (errors use `role=status`), QA-058 (muted text 4.28:1), QA-059 (no dark mode / forced colours, px font sizes), QA-060 (skip link doesn't move focus), QA-061 (tap targets < 24 px), QA-062 (heading skips, header-less tables, repeated titles), QA-049 (recovery codes run together).
+- **Session 07 polish:** QA-066 (credit-note picker lists every document), QA-069 (extras edit says "Nothing changed" though saved), QA-070 (landed method can't return to org default), QA-071 (goods lines labelled "Freight accrual" in the journal), QA-072 (wrong reason for ZIP bomb), QA-073 (text-light PDF treated as scan, verify).
 - **Misc:** QA-008 (dashboard "Waiting" column clipped at ~1024 px), QA-009 (month-end "Lock" button shown for future periods; server refuses), QA-012 (519 time zones incl. deprecated aliases), QA-017 (bogus Bearer key + live session returns 200), QA-018 (unstyled native file input), QA-019 (duplicate unreadable docs), QA-063 (static files uncached/uncompressed on dev server).
 
 ## 5. Needs a product decision ("verify")
@@ -66,7 +69,7 @@ Already explained: **QA-021** (8 posted vs 17 unchecked was just never-polled bi
 4. **Ongoing:** accessibility batch (QA-053, 058–062) and the "decide" list.
 
 **Common root causes (fix once, close many):**
-- *Input validation at the boundary* → QA-001, 005, 035, 036, 042, 043, 051, 033, 010.
+- *Input validation at the boundary* → QA-001, 005, 035, 036, 042, 043, 051, 033, 010, 065, 067, 068.
 - *Error surfaces designed for developers* → QA-002, 013, 044, 054, 055, 045.
 - *Tenant boundary assumptions* → QA-048, 040, 020, 041.
 - *Approval state vs. UI wording* → QA-003, 022, 024, 025, 029.
@@ -81,12 +84,12 @@ Role-based access (every admin page and POST returns 403 for reviewers); tenant 
 |---|---|---|
 | Public pages, login, API docs | 01, 05 | ✅ |
 | Dashboard, queue, shipment detail, documents | 01, 02, 04 | ✅ (approve/reject/override/post/bulk done) |
-| Rates, savings, landed cost | 01 | 🟡 create/edit/delete real quotes, extras CRUD, split flows not run |
-| Disputes | 03 | ❌ only create + list; send/reply/credit/resolve/close/release not run (classifier blocked the email form) |
-| Month-end, statements, payments | 03 | ✅ (PDF/XLSX statements not run) |
-| Intake, uploads, mailboxes, API | 04 | 🟡 webhooks end to end, real IMAP, Microsoft/Gmail, large-file limits not run |
+| Rates, savings, landed cost | 01, 07 | ✅ quotes/extras/charge names CRUD, CSV import, splits, methods, savings/ROI |
+| Disputes | 03, 07 | ✅ full lifecycle incl. send (console email), reply, credit, resolve, close, release, discard, roles |
+| Month-end, statements, payments | 03, 07 | ✅ incl. PDF/XLSX statements, adjustments, journal Excel |
+| Intake, uploads, mailboxes, API | 04, 07 | 🟡 uploads, limits, formats, concurrency, API keys, webhook management done; webhook delivery, real IMAP, Microsoft/Gmail not run |
 | Integrations (QuickBooks, Xero) | 02, 04 | 🟡 QuickBooks post + payment read done; connect/disconnect and Xero not run |
-| Accounts, 2FA, team, org settings | 05 | ✅ (learning actions, notification bell not run) |
+| Accounts, 2FA, team, org settings, notifications, learning, approval links, shortcuts | 05, 07 | ✅ |
 | Responsive, accessibility, performance, headers | 06 | ✅ Chromium only |
 | Other browsers, real screen reader, offline, concurrency, `DEBUG=False`/PostgreSQL | — | ⬜ not tested |
 

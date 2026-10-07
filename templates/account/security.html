@@ -24,7 +24,7 @@
         {% if recovery_codes %}
           <h3>Save your recovery codes</h3>
           <p class="muted">Each code works once if you lose your phone. Store them in a password manager. They won't be shown again.</p>
-          <div class="codes" id="recovery-codes">{% for c in recovery_codes %}<span>{{ c }}</span>{% endfor %}</div>
+          <div class="codes" id="recovery-codes">{% for c in recovery_codes %}<span>{{ c }}</span> {% endfor %}</div>
           <p style="margin-top:10px"><button class="btn btn-sm" type="button" data-copy="#recovery-codes">Copy codes</button></p>
           <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
         {% endif %}

@@ -192,9 +192,10 @@ def ingest_archive(org, filename: str, content: bytes, sha: str, *, source: str,
 
                 check_room(org, sum(m.status == "accepted" for m in members))
             if not any(m.status == "accepted" for m in members):
-                found = ", ".join(sorted({m.basename for m in members if m.status == "skipped"})[:5])
-                raise RejectedFile(f"{filename}: no PDF, image or spreadsheet files inside"
-                                   + (f" (found {found})." if found else ".") + f" Send {formats.SUPPORTED_TEXT} files.")
+                seen = {m.basename: m.reason for m in members if m.status == "skipped"}
+                found = ", ".join(f"{name}: {reason}" if reason else name for name, reason in sorted(seen.items())[:5])
+                raise RejectedFile(f"{filename}: no PDF, image or spreadsheet files could be added"
+                                   + (f" ({found})." if found else ".") + f" Send {formats.SUPPORTED_TEXT} files.")
             archive = Document(organization=org, source=source, email=email, original_filename=filename, sha256=sha,
                                source_format=Document.Format.ARCHIVE, status=Document.Status.ARCHIVE, parent=parent)
             archive.original_file.save(safe_filename(filename), ContentFile(content), save=False)

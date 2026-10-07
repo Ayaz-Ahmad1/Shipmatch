@@ -12,6 +12,7 @@
 </div>
 <form method="post" class="stack" style="max-width:900px" novalidate>
   {% csrf_token %}
+  {% if form.non_field_errors %}<div class="flash"><li class="error">{{ form.non_field_errors|join:" " }}</li></div>{% endif %}
   <section class="card">
     <div class="card-body form-grid">
       {% include "rates/_field.html" with field=form.vendor_name %}

@@ -141,6 +141,8 @@ def describe_action(action: str, data: dict) -> str:
         return action.replace(".", " ").replace("_", " ")
     values = _Default({k: _short(v) for k, v in (data or {}).items()})
     values.setdefault("system", "QuickBooks")   # rows written before Xero support don't name the system
+    if action == "field.corrected" and (data or {}).get("field"):
+        values["field"] = str(data["field"]).replace("_", " ").capitalize().replace("Bl ", "B/L ").replace("Po ", "PO ")
     if action == "issue.resolved":
         values["title"] = issue_title(data.get("code", ""))
         if data.get("severity") == "error":

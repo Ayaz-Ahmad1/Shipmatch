@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
+from apps.core.paging import Paginator
 from django.db.models import Count, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -217,7 +217,11 @@ def upload(request):
         messages.add_message(request, level, text)
     for name, doc in duplicates:
         where = f" It is in {doc.match.shipment.reference}." if hasattr(doc, "match") else ""
-        messages.info(request, f"{name} was uploaded before, so it was not added again.{where}")
+        if doc.original_filename and doc.original_filename != name:   # same contents under another name
+            messages.info(request, f"{name} has the same contents as {doc.original_filename}, which was uploaded "
+                                   f"before, so it was not added again.{where}")
+        else:
+            messages.info(request, f"{name} was uploaded before, so it was not added again.{where}")
     for reason in rejected:
         messages.error(request, f"Not uploaded: {reason}")
     hint = photo_hint([d for _, d in received])
@@ -256,6 +260,13 @@ def shipment_detail(request, pk):
                      "open_issues": [i for i in issues if i.document_id == d.pk and not i.resolved]})
     blockers = approval_blockers(shipment, request.user) if not shipment.is_locked else []
     open_issues = [i for i in issues if not i.resolved]
+    bills = [x for x in docs if x["doc"].posts_to_accounting]
+    post_summary = None
+    if shipment.status == "approved" and bills:   # a half-posted shipment says so in its header, not only in the cards
+        sent = [x["posted"].status for x in bills if x["posted"]]
+        if sent:
+            post_summary = {"posted": sent.count(PostedBill.Status.POSTED), "failed": sent.count(PostedBill.Status.FAILED),
+                            "total": len(bills)}
     pending_splits = []
     if not shipment.is_locked and any(i.code == "container_not_on_bl" for i in open_issues):
         from apps.landed.services.rules import unconfirmed_splits
@@ -265,7 +276,7 @@ def shipment_detail(request, pk):
         "shipment": shipment, "docs": docs, "open_issues": open_issues,
         "resolved_issues": [i for i in issues if i.resolved],
         "open_errors": sum(1 for i in open_issues if i.severity == "error"),
-        "blockers": blockers, "pending_splits": pending_splits, "totals": shipment_totals(shipment),
+        "blockers": blockers, "pending_splits": pending_splits, "post_summary": post_summary, "totals": shipment_totals(shipment),
         "timeline": timeline(shipment), "qbo": active_connection(org),
         "approvals": shipment.approvals.select_related("user").order_by("-created_at"),
         "other_shipments": Shipment.objects.filter(organization=org).exclude(pk=shipment.pk)

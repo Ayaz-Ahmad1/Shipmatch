@@ -28,7 +28,8 @@
 {% elif shipment.status == "approved" %}
   <div class="decision done">{% icon "check" %}
     <div class="grow"><strong>Approved</strong> by {{ shipment.approved_by|display_name }} on {{ shipment.approved_at|date:"j M Y, H:i" }}.
-      The shipment is locked. {% if can.post %}Post its bills when you're ready.{% endif %}</div>
+      The shipment is locked. {% if can.post %}Post its bills when you're ready.{% endif %}
+      {% if post_summary %}<br><strong>{{ post_summary.posted }} of {{ post_summary.total }} bill{{ post_summary.total|pluralize }} posted{% if post_summary.failed %}; {{ post_summary.failed }} failed{% endif %}.</strong>{% if post_summary.failed %} The reason is on the document card below.{% endif %}{% endif %}</div>
     <div class="decision-actions">
       {% if can.post %}
         {% if qbo and qbo.needs_reconnect %}

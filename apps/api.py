@@ -23,7 +23,8 @@ from django.shortcuts import get_object_or_404
 from ninja import File, NinjaAPI, Schema
 from ninja.errors import HttpError
 from ninja.files import UploadedFile
-from ninja.security import HttpBearer, django_auth
+from ninja.security import HttpBearer
+from ninja.security.session import SessionAuth
 
 from apps.accounts.models import ApiKey
 from apps.accounts.services.apikeys import verify
@@ -44,7 +45,16 @@ class ApiKeyAuth(HttpBearer):
         return key
 
 
-api = NinjaAPI(title="ShipMatch API", version="1.2", auth=[ApiKeyAuth(), django_auth],
+class BrowserSessionAuth(SessionAuth):
+    """The signed-in browser session, unless the request presented a Bearer key: a bad key must not fall back."""
+
+    def authenticate(self, request, key):
+        if request.headers.get("Authorization", "").lower().startswith("bearer "):
+            return None
+        return super().authenticate(request, key)
+
+
+api = NinjaAPI(title="ShipMatch API", version="1.2", auth=[ApiKeyAuth(), BrowserSessionAuth()],
                description="Upload shipping documents, read reconciled shipments with their issues, read documents "
                            "with every value read, and download exports.\n\n"
                            "Authenticate with `Authorization: Bearer sm_...` (Settings > API keys). Each key has "
@@ -245,6 +255,15 @@ def upload_document(request, org: str, file: UploadedFile = File(...)):
     return (201 if created else 200), doc
 
 
+def _paging(limit: int, offset: int) -> tuple[int, int]:
+    """limit 1-500 (a larger one is capped at 500), offset 0 or more; anything else is a mistake worth saying so."""
+    if limit < 1:
+        raise HttpError(422, "limit must be 1 or more (at most 500).")
+    if offset < 0:
+        raise HttpError(422, "offset can't be negative.")
+    return min(limit, 500), offset
+
+
 @api.get("/{org}/documents", response=list[DocumentOut], summary="Documents with extracted fields, newest first")
 def list_documents(request, org: str, view: Literal["attention", "matched", "all"] = "all",
                    type: Optional[str] = None, status: Optional[str] = None, q: Optional[str] = None,
@@ -263,9 +282,10 @@ def list_documents(request, org: str, view: Literal["attention", "matched", "all
     except ValueError as e:
         raise HttpError(400, str(e))
     if status:
+        if status not in Document.Status.values:
+            raise HttpError(422, f"Unknown status “{status}”. Use one of: {', '.join(Document.Status.values)}.")
         qs = qs.filter(status=status)
-    limit = max(1, min(limit, 500))
-    offset = max(offset, 0)
+    limit, offset = _paging(limit, offset)
     return list(qs.select_related("match__shipment").prefetch_related("fields", "children")
                 .order_by("-received_at", "-id")[offset:offset + limit])
 
@@ -277,8 +297,9 @@ def get_document(request, org: str, doc_id: int):
 
 
 @api.get("/{org}/shipments", response=list[ShipmentOut], summary="Shipments, newest activity first")
-def list_shipments(request, org: str, status: Optional[str] = None, q: Optional[str] = None,
-                   limit: int = 100, offset: int = 0):
+def list_shipments(request, org: str,
+                   status: Optional[Literal["open", "needs_review", "ready", "approved", "posted", "rejected"]] = None,
+                   q: Optional[str] = None, limit: int = 100, offset: int = 0):
     """Scope: shipments:read. `status`: needs_review, ready, approved, posted, rejected or open (empty = all).
     `q` searches references, B/L, containers, POs, invoice numbers, vendors and file names."""
     from apps.integrations.exports import _search_shipments
@@ -292,8 +313,8 @@ def list_shipments(request, org: str, status: Optional[str] = None, q: Optional[
         n_errors=Count("issues", filter=Q(issues__resolved=False, issues__severity="error"), distinct=True),
         n_warnings=Count("issues", filter=Q(issues__resolved=False, issues__severity="warning"), distinct=True),
     ).order_by("-updated_at", "-id")
-    limit = max(1, min(limit, 500))
-    return qs[max(offset, 0):max(offset, 0) + limit]
+    limit, offset = _paging(limit, offset)
+    return qs[offset:offset + limit]
 
 
 @api.get("/{org}/shipments/{shipment_id}", response=ShipmentDetailOut,

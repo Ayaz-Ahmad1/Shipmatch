@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django import forms
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 from .models import CloseSettings
 
@@ -33,6 +34,19 @@ class CloseSettingsForm(forms.ModelForm):
             "min_history": "A vendor's or the organization's median is used only with at least this many past "
                            "invoices.",
         }
+
+    RANGES = {"lookback_days": (7, 1095, "Use a window between 7 and 1,095 days."),
+              "min_history": (1, 50, "Use a number between 1 and 50.")}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # The model's own "0 or more" rule fired first and gave a different message from the real range.
+        for name, (low, high, message) in self.RANGES.items():
+            field = self.fields[name]
+            field.validators = [v for v in field.validators if not isinstance(v, (MinValueValidator, MaxValueValidator))]
+            field.validators += [MinValueValidator(low, message), MaxValueValidator(high, message)]
+            field.min_value, field.max_value = low, high
+            field.widget.attrs.update(min=low, max=high)
 
     def clean_lookback_days(self):
         value = self.cleaned_data["lookback_days"]

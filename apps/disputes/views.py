@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
+from apps.core.paging import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -148,7 +148,7 @@ def _credit_candidates(dispute: Dispute):
             (credits if d.is_credit else same).append(d)
         else:
             other.append(d)
-    return credits + same + other[: max(0, 40 - len(credits) - len(same))]
+    return credits + same   # another vendor's documents can't be this vendor's credit
 
 
 @login_required
@@ -301,7 +301,7 @@ def credit(request, pk):
     dispute = _dispute_for(request, pk, "approve")
     try:
         workflow.record_credit(dispute, request.user, p.get("amount", ""), p.get("credit_note", ""),
-                               p.get("settles") == "on", p.get("note", ""))
+                               p.get("settles") == "on", p.get("note", ""), confirm_over=p.get("confirm_over") == "on")
     except DisputeError as e:
         messages.error(request, str(e))
         return _detail(dispute)
@@ -309,7 +309,7 @@ def credit(request, pk):
     if dispute.status == Dispute.Status.RESOLVED:
         text += " The dispute is resolved."
     if dispute.amount_recovered > dispute.amount_disputed:
-        messages.info(request, "The credit is more than the amount disputed. Check the amount if that was not expected.")
+        messages.info(request, "The credit is more than the amount disputed, as you confirmed.")
     messages.success(request, text)
     return _detail(dispute)
 

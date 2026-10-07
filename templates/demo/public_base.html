@@ -27,7 +27,7 @@
     <a class="btn btn-sm" href="{% url 'accounts:login' %}">{% if demo_mode %}Open the demo{% else %}Sign in{% endif %}</a>
   </nav>
 </header>
-<main id="main" class="public-main">
+<main id="main" tabindex="-1" class="public-main">
   {% include "includes/messages.html" %}
   {% block content %}{% endblock %}
 </main>

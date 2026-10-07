@@ -14,6 +14,7 @@ from apps.disputes.models import Dispute, DisputeEvent, DisputeSettings, VendorC
 from apps.disputes.services import drafting, sending, workflow
 from apps.disputes.services.workflow import DisputeError
 from apps.disputes.tasks import flag_overdue
+from apps.documents.models import Document, ExtractedField
 from apps.documents.services import llm
 from apps.documents.services.ingest import ingest_bytes
 from apps.shipments.models import Shipment, ValidationIssue
@@ -474,3 +475,78 @@ def test_dispute_settings_are_for_admins(client, user, admin_user):
     assert (s.reply_to, s.follow_up_days, s.signature, s.copy_reply_to) == ("ap@test.example", 10, "AP team", True)
     assert AuditEvent.objects.filter(action="dispute_settings.updated").exists()
     assert "Changed the dispute email settings" in client.get(reverse("core:audit")).content.decode()
+
+
+# --------------------------------------------------------------------------- QA-065 / QA-066 / QA-067
+
+
+@pytest.mark.django_db
+def test_disputed_amount_cannot_exceed_the_invoice_or_be_zero_when_money_is_at_risk(bad, issue, user):
+    from apps.disputes.services.workflow import _invoice_total
+
+    draft = _draft(bad, issue, user)
+    total = _invoice_total(draft)
+    assert total is not None and draft.amount_disputed > 0
+    common = dict(vendor_email="billing@atlas.example", contact_name="", cc="", subject=draft.subject,
+                  body=draft.body, issue_ids=[issue.pk], follow_up="", remember=False)
+
+    with pytest.raises(DisputeError, match="more than the whole invoice"):
+        workflow.update_draft(draft, user, amount=str(total + 1), **common)
+    with pytest.raises(DisputeError, match="can't be 0"):
+        workflow.update_draft(draft, user, amount="0", **common)
+    workflow.update_draft(draft, user, amount="1.00", **common)   # a smaller amount is fine
+    draft.refresh_from_db()
+    assert draft.amount_disputed == Decimal("1.00")
+
+
+@pytest.mark.django_db
+def test_a_credit_bigger_than_the_dispute_needs_confirming(approver, user, bad, issue):
+    dispute = _send(_draft(bad, issue, user), approver)
+    disputed = dispute.amount_disputed
+
+    with pytest.raises(DisputeError, match="more than the amount disputed"):
+        workflow.record_credit(dispute, approver, str(disputed + 10))
+    dispute.refresh_from_db()
+    assert dispute.amount_recovered == 0   # nothing was recorded
+
+    workflow.record_credit(dispute, approver, str(disputed + 10), confirm_over=True)
+    dispute.refresh_from_db()
+    assert dispute.amount_recovered == disputed + 10
+
+
+@pytest.mark.django_db
+def test_a_credit_bigger_than_the_whole_invoice_is_refused_even_when_confirmed(approver, user, bad, issue):
+    from apps.disputes.services.workflow import _invoice_total
+
+    dispute = _send(_draft(bad, issue, user), approver)
+    too_much = _invoice_total(dispute) + 1
+    with pytest.raises(DisputeError, match="more than the whole invoice"):
+        workflow.record_credit(dispute, approver, str(too_much), confirm_over=True)
+    dispute.refresh_from_db()
+    assert dispute.amount_recovered == 0
+
+
+@pytest.mark.django_db
+def test_a_credit_within_the_dispute_needs_no_confirmation(approver, user, bad, issue):
+    dispute = _send(_draft(bad, issue, user), approver)
+    workflow.record_credit(dispute, approver, str(dispute.amount_disputed))
+    dispute.refresh_from_db()
+    assert dispute.amount_recovered == dispute.amount_disputed
+
+
+@pytest.mark.django_db
+def test_credit_picker_offers_only_this_vendors_documents(client, approver, user, bad, issue, loaded, org):
+    from apps.disputes.views import _credit_candidates
+
+    dispute = _send(_draft(bad, issue, user), approver)
+    stranger = Document.objects.create(organization=org, original_filename="other-vendor-invoice.pdf",
+                                       sha256="x" * 64, doc_type="freight_invoice", status="extracted")
+    ExtractedField.objects.create(document=stranger, name="vendor_name", value="Totally Different Haulage Ltd",
+                                  confidence=1.0, source="human")
+    shown = _credit_candidates(dispute)
+    assert stranger not in shown
+    assert all(d.field("vendor_name") and d.field("vendor_name").lower().startswith("atlas") for d in shown) or shown == []
+
+    client.force_login(approver)
+    page = client.get(reverse("disputes:detail", args=[dispute.pk])).content.decode()
+    assert "other-vendor-invoice.pdf" not in page and 'name="confirm_over"' in page
