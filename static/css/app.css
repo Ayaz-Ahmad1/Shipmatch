@@ -1304,3 +1304,6 @@ table.data.pf-deliveries tbody tr.pf-payload-row:hover td { background: transpar
 /* Shared-invoice split: let the form and its tables shrink to a phone screen instead of widening the page (QA-006). */
 .lc-si-actions > *, .lc-edit, .lc-split-form, .lc-split-form fieldset { min-width: 0; max-width: 100%; }
 @media (max-width: 480px) { table.data.lc-split td:nth-child(2) { min-width: 0; } }
+.stack > * { min-width: 0; }                                   /* grid items may shrink below their content on phones (QA-006) */
+.wf-comment-form { grid-template-columns: minmax(0, 1fr); }
+.wf-comment-form textarea { width: 100%; box-sizing: border-box; }

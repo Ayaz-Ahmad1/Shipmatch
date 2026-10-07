@@ -12,7 +12,7 @@ Period: 3–4 Oct 2026. Method: exploratory testing in the in-app browser, issue
 Fixes are in commits `0aea335`, `0d04083` and `fdbe801` (earlier branch) and `fe46865` (`fix/qa-remaining`).
 
 - **Fixed:** QA-001, 002, 003, 004, 005, 006*, 007*, 008, 009, 010, 011, 012, 013, 014, 015, 017, 018, 024, 025, 026, 028, 029, 030, 032, 033, 034, 035, 036, 038, 039, 041, 042, 043, 044, 046, 048, 049, 051, 053, 054, 055, 058, 060, 061, 062, 064, 065, 066, 067, 068, 069, 071, 072, 074.
-  (* CSS/JS change not yet checked in a browser at 375 px / 1024 px.)
+  (QA-006 and QA-007 were checked in the browser at 375 px and 1024 px on SHP-000041 and SHP-000044.)
 - **Partly fixed:** QA-056 (totals are paged; about 5 queries per ready shipment remain).
 - **Not a defect on inspection:** QA-019 (different bytes, not duplicates), QA-037 and QA-052 (messages exist and render), QA-045, QA-070.
 - **Left open, performance or deployment:** QA-057 (pdf.js loads eagerly; the evidence highlighting depends on it), QA-063 (static file caching), QA-031 (redirect URI comes from `.env`).
