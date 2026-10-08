@@ -91,6 +91,20 @@ def unconfirmed_splits(shipment: Shipment) -> list[str]:
             if allocation.adds_up(doc, rows) and not allocation.is_confirmed(si, rows)]
 
 
+def shipments_with_shared_invoices(shipment_ids) -> set[int]:
+    """Which of these shipments carry or own a shared invoice (the only ones `approval_blockers` can object to)."""
+    from apps.shipments.models import MatchLink
+
+    from ..models import InvoiceAllocation
+
+    shared_docs = SharedInvoice.objects.filter(status=SharedInvoice.Status.ACTIVE).values("document_id")
+    out = set(InvoiceAllocation.objects.filter(shipment_id__in=shipment_ids, document_id__in=shared_docs)
+              .values_list("shipment_id", flat=True))
+    out |= set(MatchLink.objects.filter(shipment_id__in=shipment_ids, document_id__in=shared_docs)
+               .values_list("shipment_id", flat=True))
+    return out
+
+
 def approval_blockers(shipment: Shipment, user) -> list[str]:
     reasons = []
     for si, doc, rows, is_primary in _active_splits(shipment):

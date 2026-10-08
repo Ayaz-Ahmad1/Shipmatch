@@ -5,8 +5,11 @@ the shipment needs an approver without a limit.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+
+from django.db.models import Count
 
 from apps.core.models import AuditEvent
 from apps.core.permissions import has_perm, membership_for
@@ -36,6 +39,17 @@ def register_posting_blocker(fn) -> None:
         POSTING_BLOCKERS.append(fn)
 
 
+# Rules that only ever object to shipments with something special (a dispute waiting, a shared invoice) are marked
+# `fn.skip_when_quiet = True` and register a provider here: fn(shipment_ids) -> the ids that have such a thing.
+# A list of many shipments (My work) then runs those rules only for the few shipments they can apply to.
+QUIET_PROVIDERS = []
+
+
+def register_quiet_provider(fn) -> None:
+    if fn not in QUIET_PROVIDERS:
+        QUIET_PROVIDERS.append(fn)
+
+
 def posting_blockers(shipment: Shipment) -> list[str]:
     reasons: list[str] = []
     for blocker in POSTING_BLOCKERS:
@@ -53,9 +67,12 @@ class Totals:
 
 def shipment_totals(shipment: Shipment) -> Totals:
     """What the shipment costs: payable invoices net of credit notes, per currency and in the home currency."""
-    org = shipment.organization
+    return totals_from_documents(shipment.organization, shipment.documents.prefetch_related("fields"))
+
+
+def totals_from_documents(org, documents) -> Totals:
     t = Totals()
-    for doc in shipment.documents.prefetch_related("fields"):
+    for doc in documents:
         if not doc.posts_to_accounting:
             continue
         try:
@@ -79,6 +96,27 @@ def shipment_totals(shipment: Shipment) -> Totals:
     return t
 
 
+def makers_for(shipment_ids: list[int]) -> dict[int, set[int]]:
+    """`makers` for many shipments with one query per table: {shipment id: user ids}."""
+    from apps.shipments.models import MatchLink
+
+    doc_owner = {}      # document id (as text) -> shipment id
+    for shipment_id, doc_id in (MatchLink.objects.filter(shipment_id__in=shipment_ids)
+                                .values_list("shipment_id", "document_id")):
+        doc_owner[str(doc_id)] = shipment_id
+    issue_owner = {str(pk): shipment_id for pk, shipment_id in
+                   ValidationIssue.objects.filter(shipment_id__in=shipment_ids).values_list("pk", "shipment_id")}
+    out: dict[int, set[int]] = defaultdict(set)
+    events = AuditEvent.objects.filter(action__in=MAKER_ACTIONS, actor__isnull=False)
+    for object_type, owners in (("Document", doc_owner), ("ValidationIssue", issue_owner)):
+        keys = list(owners)
+        for start in range(0, len(keys), 500):   # keep each IN list well inside the database's variable limit
+            rows = events.filter(object_type=object_type, object_id__in=keys[start:start + 500])
+            for object_id, actor_id in rows.values_list("object_id", "actor_id"):
+                out[owners[object_id]].add(actor_id)
+    return dict(out)
+
+
 def makers(shipment: Shipment) -> set[int]:
     """User IDs who prepared this shipment (uploaded, edited, moved documents or accepted issues)."""
     doc_ids = [str(pk) for pk in Document.objects.filter(match__shipment=shipment).values_list("pk", flat=True)]
@@ -93,28 +131,70 @@ def makers(shipment: Shipment) -> set[int]:
     return ids
 
 
-def approval_blockers(shipment: Shipment, user) -> list[str]:
-    """Reasons this user cannot approve this shipment now. Empty list = may approve."""
+@dataclass
+class ApprovalHints:
+    """What `approval_blockers` would otherwise look up one shipment at a time, read for many shipments at once."""
+
+    error_counts: dict[int, int] = field(default_factory=dict)
+    makers: dict[int, set[int]] = field(default_factory=dict)
+    totals: dict[int, Totals] = field(default_factory=dict)
+    busy: set[int] = field(default_factory=set)   # shipments the skip_when_quiet rules could object to
+
+
+def bulk_hints(shipments: list[Shipment], *, with_totals: bool = False) -> ApprovalHints:
+    """Hints for a list of shipments in a handful of queries (instead of about seven per shipment)."""
+    ids = [s.pk for s in shipments]
+    hints = ApprovalHints()
+    if not ids:
+        return hints
+    hints.error_counts = dict(ValidationIssue.objects.filter(
+        shipment_id__in=ids, resolved=False, severity=ValidationIssue.Severity.ERROR)
+        .values_list("shipment_id").annotate(n=Count("id")))
+    hints.makers = makers_for(ids)
+    for provider in QUIET_PROVIDERS:
+        hints.busy |= set(provider(ids))
+    if with_totals:
+        by_ship: dict[int, list] = defaultdict(list)
+        for doc in (Document.objects.filter(match__shipment_id__in=ids).select_related("match")
+                    .prefetch_related("fields")):
+            by_ship[doc.match.shipment_id].append(doc)
+        hints.totals = {s.pk: totals_from_documents(s.organization, by_ship.get(s.pk, [])) for s in shipments}
+    return hints
+
+
+def approval_blockers(shipment: Shipment, user, hints: ApprovalHints | None = None) -> list[str]:
+    """Reasons this user cannot approve this shipment now. Empty list = may approve.
+
+    `hints` (from `bulk_hints`) only saves queries when many shipments are checked; the answer is the same."""
     org = shipment.organization
     reasons: list[str] = []
     if shipment.is_locked:
         return ["This shipment is already approved."]
     if shipment.status == Shipment.Status.REJECTED:
         reasons.append("This shipment was rejected. Reopen it first.")
-    errors = shipment.issues.filter(resolved=False, severity=ValidationIssue.Severity.ERROR).count()
+    if hints is not None:
+        errors = hints.error_counts.get(shipment.pk, 0)
+    else:
+        errors = shipment.issues.filter(resolved=False, severity=ValidationIssue.Severity.ERROR).count()
     if errors:
         reasons.append(f"Resolve {errors} open error{'s' if errors != 1 else ''} first.")
     for blocker in APPROVAL_BLOCKERS:
+        if hints is not None and getattr(blocker, "skip_when_quiet", False) and shipment.pk not in hints.busy:
+            continue
         reasons.extend(blocker(shipment, user))
     if not has_perm(user, org, "approve"):
         reasons.append("Only approvers and admins can approve shipments.")
         return reasons
-    if org.maker_checker and user.pk in makers(shipment):
+    prepared_by = hints.makers.get(shipment.pk, set()) if hints is not None else None
+    if org.maker_checker and user.pk in (makers(shipment) if prepared_by is None else prepared_by):
         reasons.append("You prepared this shipment, so another approver must approve it (maker-checker rule).")
     membership = membership_for(user, org)
     limit = membership.approval_limit if membership else None
     if limit is not None:
-        totals = shipment_totals(shipment)
+        if hints is not None and shipment.pk in hints.totals:
+            totals = hints.totals[shipment.pk]
+        else:
+            totals = shipment_totals(shipment)
         if totals.home is None:
             reasons.append(f"No exchange rate set for {', '.join(totals.missing_rates)}, so your approval limit "
                            "cannot be checked. An admin can add the rate, or an approver without a limit can approve.")

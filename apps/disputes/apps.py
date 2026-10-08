@@ -12,7 +12,7 @@ class DisputesConfig(AppConfig):
         from apps.core import context_processors, views
         from apps.shipments import labels
         from apps.shipments.models import ValidationIssue
-        from apps.shipments.services.approval import register_approval_blocker
+        from apps.shipments.services.approval import register_approval_blocker, register_quiet_provider
 
         from . import labels as dispute_labels
         from .services import workflow
@@ -24,6 +24,8 @@ class DisputesConfig(AppConfig):
                 views.AUDIT_ACTION_GROUPS.append(group)
         context_processors.SECTIONS.setdefault("disputes:settings", "settings")
         register_approval_blocker(workflow.approval_blockers)
+        workflow.approval_blockers.skip_when_quiet = True
+        register_quiet_provider(workflow.shipments_with_holds)
 
         def _relink(sender, instance, created, **kwargs):
             if created:

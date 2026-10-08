@@ -481,6 +481,12 @@ def resolve_linked_issues(dispute: Dispute, user, note: str) -> int:
 # --------------------------------------------------------------------------- hooks
 
 
+def shipments_with_holds(shipment_ids) -> set[int]:
+    """Which of these shipments have a dispute holding them (so `approval_blockers` can be skipped for the rest)."""
+    return set(Dispute.objects.filter(shipment_id__in=shipment_ids, status__in=Dispute.WAITING, hold_released=False)
+               .values_list("shipment_id", flat=True))
+
+
 def approval_blockers(shipment: Shipment, user) -> list[str]:
     """Registered with the approval rules: a dispute waiting for the vendor holds the shipment."""
     reasons = []

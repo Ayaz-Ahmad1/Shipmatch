@@ -12,7 +12,8 @@ class LandedConfig(AppConfig):
         from apps.core import context_processors, views
         from apps.core.models import AuditEvent
         from apps.shipments import labels
-        from apps.shipments.services.approval import register_approval_blocker, register_posting_blocker
+        from apps.shipments.services.approval import (
+            register_approval_blocker, register_posting_blocker, register_quiet_provider)
         from apps.shipments.services.validation import register_shipment_rule
 
         from . import hooks
@@ -28,6 +29,8 @@ class LandedConfig(AppConfig):
         context_processors.SECTIONS.setdefault("landed:settings", "settings")
         register_shipment_rule(rules.check_shared)
         register_approval_blocker(rules.approval_blockers)
+        rules.approval_blockers.skip_when_quiet = True
+        register_quiet_provider(rules.shipments_with_shared_invoices)
         register_posting_blocker(allocation.posting_blockers)
 
         # A shared invoice posts as one bill with each shipment's share on its own lines.
