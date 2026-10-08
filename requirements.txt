@@ -30,7 +30,6 @@ google-auth-oauthlib>=1.2
 pypdf>=3.17            # split PDFs that hold several invoices; count pages
 openpyxl>=3.1          # read .xlsx invoices
 defusedxml>=0.7        # openpyxl uses it to refuse harmful XML in .xlsx files
-lxml>=5.0              # optional: openpyxl uses it for Excel files when present (no speed-up measured on Python 3.14, see qa/QA_SESSION_13.md)
 
 # Synthetic dataset, PDF copies of spreadsheets, photos converted to PDF
 reportlab>=4.1
